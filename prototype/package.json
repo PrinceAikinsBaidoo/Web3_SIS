@@ -1,0 +1,32 @@
+{
+  "name": "academic-records-prototype",
+  "version": "1.0.0",
+  "description": "Hybrid Blockchain System for Secure Storage and Verification of Academic Records",
+  "main": "index.js",
+  "scripts": {
+    "compile": "hardhat compile",
+    "test": "hardhat test",
+    "deploy": "hardhat run scripts/deploy.js",
+    "demo": "node scripts/demo-workflow.js",
+    "node": "hardhat node"
+  },
+  "keywords": [
+    "blockchain",
+    "academic-records",
+    "solidity",
+    "smart-contracts",
+    "ipfs",
+    "ethereum"
+  ],
+  "author": "",
+  "license": "MIT",
+  "devDependencies": {
+    "@nomicfoundation/hardhat-toolbox": "^2.0.0",
+    "hardhat": "^2.17.0"
+  },
+  "dependencies": {
+    "dotenv": "^16.0.3",
+    "ethers": "^5.7.2"
+  }
+}
+
