@@ -192,6 +192,12 @@ export interface EncryptedRecord {
   key: string           // Base64 encoded encryption key
 }
 
+export interface SecretEncryptedRecord {
+  encryptedData: string
+  iv: string
+  salt: string
+}
+
 /**
  * Create encrypted record for IPFS storage
  * @param recordData - Original record data
@@ -213,6 +219,22 @@ export async function createEncryptedRecord(
   }
 }
 
+export async function createEncryptedRecordWithSecret(
+  recordData: unknown,
+  secret: string
+): Promise<SecretEncryptedRecord> {
+  const iv = generateIV()
+  const salt = crypto.getRandomValues(new Uint8Array(16))
+  const key = await deriveKeyFromPassword(secret, salt)
+  const encryptedData = await encryptData(recordData, key, iv)
+
+  return {
+    encryptedData,
+    iv: uint8ArrayToBase64(iv),
+    salt: uint8ArrayToBase64(salt)
+  }
+}
+
 /**
  * Decrypt record from IPFS
  * @param encryptedRecord - EncryptedRecord from IPFS
@@ -226,6 +248,15 @@ export async function decryptEncryptedRecord<T = unknown>(
   return decryptData<T>(encryptedRecord.encryptedData, key)
 }
 
+export async function decryptEncryptedRecordWithSecret<T = unknown>(
+  encryptedRecord: SecretEncryptedRecord,
+  secret: string
+): Promise<T> {
+  const saltBytes = base64ToUint8Array(encryptedRecord.salt)
+  const key = await deriveKeyFromPassword(secret, saltBytes)
+  return decryptData<T>(encryptedRecord.encryptedData, key)
+}
+
 export default {
   generateEncryptionKey,
   generateIV,
@@ -235,6 +266,8 @@ export default {
   decryptData,
   deriveKeyFromPassword,
   createEncryptedRecord,
-  decryptEncryptedRecord
+  decryptEncryptedRecord,
+  createEncryptedRecordWithSecret,
+  decryptEncryptedRecordWithSecret
 }
 

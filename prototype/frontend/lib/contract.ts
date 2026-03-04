@@ -93,15 +93,15 @@ const INSTITUTION_REGISTRY_ABI = [
   "event InstitutionReactivated(address indexed institutionAddress, uint256 timestamp)"
 ]
 
-// Contract addresses from deployment (Sepolia)
+// Contract addresses from environment (with fallback defaults)
 const CONTRACT_ADDRESSES = {
-  recordRegistry: '0x7FbC5257a73b51Fd01859cd50C7A1eAA5E476EA1',
-  studentIdentity: '0x1ADE0d732e29f82041a6FB04F7C420fa06f3Ce3a',
-  verificationLog: '0x09dDF1069F2b01Ab6217DC5710ea47D5de6883D5',
-  institutionRegistry: '0xcd454b704FED5744893874D70DE1A3F3C0858407'
+  recordRegistry: process.env.NEXT_PUBLIC_RECORD_REGISTRY_ADDRESS || '0x7FbC5257a73b51Fd01859cd50C7A1eAA5E476EA1',
+  studentIdentity: process.env.NEXT_PUBLIC_STUDENT_IDENTITY_ADDRESS || '0x1ADE0d732e29f82041a6FB04F7C420fa06f3Ce3a',
+  verificationLog: process.env.NEXT_PUBLIC_VERIFICATION_LOG_ADDRESS || '0x09dDF1069F2b01Ab6217DC5710ea47D5de6883D5',
+  institutionRegistry: process.env.NEXT_PUBLIC_INSTITUTION_REGISTRY_ADDRESS || '0xcd454b704FED5744893874D70DE1A3F3C0858407'
 }
 
-const DEFAULT_RPC_URL = 'https://ethereum-sepolia-rpc.publicnode.com'
+const DEFAULT_RPC_URL = process.env.NEXT_PUBLIC_RPC_URL || 'https://ethereum-sepolia-rpc.publicnode.com'
 
 // Types
 export interface Record {

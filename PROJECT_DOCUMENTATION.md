@@ -9,19 +9,20 @@
 2. [System Architecture](#2-system-architecture)
 3. [Smart Contracts](#3-smart-contracts)
 4. [Frontend Application](#4-frontend-application)
-5. [Security Implementation](#5-security-implementation)
-6. [IPFS Integration](#6-ipfs-integration)
-7. [Workflow Demonstration](#7-workflow-demonstration)
-8. [Deployment Guide](#8-deployment-guide)
-9. [Evaluation Metrics](#9-evaluation-metrics)
-10. [Conclusion](#10-conclusion)
+5. [Public/Private Credential System](#5-publicprivate-credential-system)
+6. [Security Implementation](#6-security-implementation)
+7. [IPFS Integration](#7-ipfs-integration)
+8. [Workflow Demonstration](#8-workflow-demonstration)
+9. [Deployment Guide](#9-deployment-guide)
+10. [Evaluation Metrics](#10-evaluation-metrics)
+11. [Conclusion](#11-conclusion)
 
 ---
 
 ## 1. Executive Summary
 
 ### 1.1 Project Overview
-This project implements a **Hybrid Blockchain System for Secure Storage and Verification of Academic Records**. The system combines the immutability and trustless verification capabilities of blockchain technology with the scalability and privacy features of off-chain encrypted storage.
+This project implements a **Hybrid Blockchain System for Secure Storage and Verification of Academic Records** with support for public/private credentials. The system combines the immutability and trustless verification capabilities of blockchain technology with the scalability and privacy features of off-chain encrypted storage.
 
 ### 1.2 Problem Statement
 Traditional academic record management systems suffer from:
@@ -31,13 +32,15 @@ Traditional academic record management systems suffer from:
 - **Operational Inefficiency**: Verification takes days/weeks
 - **Interoperability Issues**: Different formats hinder global verification
 - **GDPR Non-Compliance**: Immutable storage conflicts with "right to be forgotten"
+- **No Privacy Options**: All data visible to anyone who verifies
 
 ### 1.3 Proposed Solution
 A three-tiered hybrid blockchain architecture that:
 - Stores record hashes on-chain for immutability
 - Stores encrypted records off-chain (IPFS) for privacy
-- Uses AES-256-GCM encryption for data confidentiality
-- Enables student-controlled decryption keys
+- Uses AES-256-GCM encryption with PBKDF2 key derivation
+- Implements dual-layer credentials (public vs private)
+- Enables student-controlled secret keys for private data access
 - Supports trustless verification without revealing sensitive data
 
 ---
@@ -53,15 +56,25 @@ A three-tiered hybrid blockchain architecture that:
 │  │   Issuer    │  │  Verifier   │  │  Student    │            │
 │  │  Dashboard  │  │  Dashboard  │  │  Portal     │            │
 │  └─────────────┘  └─────────────┘  └─────────────┘            │
-└─────────────────────────────────────────────────────────────────┘
+│        │               │                  │                      │
+│        │    ┌──────────┴──────────┐       │                      │
+│        │    │ Public Data        │       │                      │
+│        │    │ (Always Visible)   │       │                      │
+│        │    └─────────────────────┘       │                      │
+│        │               │                  │                      │
+│        │    ┌──────────┴──────────┐       │                      │
+│        │    │ Private Data       │       │                      │
+│        │    │ (Secret Key Req'd)  │       │                      │
+│        │    └─────────────────────┘       │                      │
+└────────┴──────────────────────────────────┴─────────────────────┘
                               │
                               ▼
 ┌─────────────────────────────────────────────────────────────────┐
 │                   BLOCKCHAIN LAYER (On-Chain)                   │
 │  ┌──────────────────────┐  ┌──────────────────────────┐        │
-│  │  RecordRegistry.sol  │  │ InstitutionRegistry.sol │        │
+│  │  RecordRegistry.sol  │  │ InstitutionRegistry.sol  │        │
 │  │  - Record hashes    │  │  - Institution details   │        │
-│  │  - Issuer auth      │  │  - Accreditation status  │        │
+│  │  - Public metadata  │  │  - Accreditation status  │        │
 │  │  - Timestamps       │  │  - Authorized wallets   │        │
 │  └──────────────────────┘  └──────────────────────────┘        │
 │                                                                 │
@@ -73,12 +86,16 @@ A three-tiered hybrid blockchain architecture that:
 │                   STORAGE LAYER (Off-Chain)                     │
 │  ┌─────────────────────────────────────────────────────────┐    │
 │  │                      IPFS                                │    │
-│  │  - Encrypted academic records                          │    │
+│  │  ┌─────────────────┐  ┌─────────────────────────────┐  │    │
+│  │  │ Private Data    │  │ Off-Chain Only Data        │  │    │
+│  │  │ (Encrypted with │  │ (Encrypted, never on-chain)│  │    │
+│  │  │  student secret)│  │                            │  │    │
+│  │  └─────────────────┘  └─────────────────────────────┘  │    │
 │  │  - Content-addressed storage                          │    │
 │  │  - Content Identifier (CID) for retrieval             │    │
 │  └─────────────────────────────────────────────────────────┘    │
 │                                                                 │
-│  Benefits: Scalability, Data Privacy, Cost Efficiency           │
+│  Benefits: Scalability, Data Privacy, Cost Efficiency          │
 └─────────────────────────────────────────────────────────────────┘
 ```
 
@@ -90,32 +107,39 @@ A three-tiered hybrid blockchain architecture that:
 │  (Data Sub) │     │ (University)│     │ (Employer)  │
 └──────────────┘     └──────────────┘     └──────────────┘
        │                    │                    │
-       │  1. Submit Data    │                    │
+       │  1. Submit Data   │                    │
        │───────────────────>│                    │
        │                    │                    │
-       │                    │  2. Encrypt        │
-       │                    │  (AES-256-GCM)     │
-       │                    │         │          │
-       │                    │         ▼          │
-       │                    │  3. Upload to IPFS │
-       │                    │         │          │
-       │                    │         ▼          │
-       │                    │  4. Get CID       │
-       │                    │         │          │
-       │                    │         ▼          │
-       │                    │  5. Hash + Tx    │
-       │                    │         │          │
-       │                    │         ▼          │
-       │                    │  6. Store on-chain│
+       │                    │  2. Encrypt (Dual-Layer)
+       │                    │    • Public → on-chain
+       │                    │    • Private → encrypted IPFS
+       │                    │    • Sensitive → encrypted, no hash
+       │                    │         │
+       │                    │         ▼
+       │                    │  3. Student sets secret key
+       │                    │         │
+       │                    │         ▼
+       │                    │  4. Upload to IPFS
+       │                    │         │
+       │                    │         ▼
+       │                    │  5. Get CID
+       │                    │         │
+       │                    │         ▼
+       │                    │  6. Store hash + public on-chain
        │                    │                    │
-       │                    │  7. Provide CID   │
+       │                    │  7. Provide CID + secret to student
        │                    │<──────────────────│
        │                    │                    │
        │                    │                    │  8. Query Chain
-       │                    │                    │<────────────────
+       │                    │                    │<──────────────
        │                    │                    │
-       │                    │                    │  9. Verify Hash
-       │                    │                    │────────────────>
+       │                    │                    │  9a. PUBLIC: View without secret
+       │                    │                    │─────────────>
+       │                    │                    │
+       │                    │                    │  9b. PRIVATE: Enter secret key
+       │                    │                    │<──────────────
+       │                    │                    │  9c. Decrypt IPFS
+       │                    │                    │─────────────>
 ```
 
 ---
@@ -133,26 +157,7 @@ The core smart contract for issuing, revoking, and verifying academic records on
 - **Revocation Support**: Issuers can revoke invalid/fraudulent records
 - **Timestamp Tracking**: All actions timestamped for audit trail
 - **Institution Integration**: Links with InstitutionRegistry for authorization
-
-#### Contract Structure
-
-```solidity
-contract RecordRegistry {
-    // Core data structures
-    struct Record {
-        bytes32 recordHash;    // keccak256 hash
-        address issuer;         // University address
-        uint256 timestamp;      // Issue timestamp
-        bool isValid;          // Validity status
-        string metadata;       // Student ID, degree, etc.
-    }
-    
-    // State variables
-    mapping(bytes32 => Record) public records;
-    mapping(address => bool) public authorizedIssuers;
-    mapping(address => bytes32[]) public issuerRecords;
-}
-```
+- **Public Metadata**: Stores public credential information on-chain
 
 #### Key Functions
 
@@ -180,58 +185,6 @@ Manages university/issuer registration, accreditation, and wallet authorization.
 - **Accreditation Management**: Track accreditation status
 - **Multi-Wallet Support**: Institutions can have multiple authorized wallets
 - **Domain Verification**: Prevents duplicate registrations
-- **Auto-generated Accreditation ID**: System generates unique ID for each institution
-- **Duplicate Prevention**: Prevents re-registration of already registered institutions
-
-#### Contract Structure
-
-```solidity
-contract InstitutionRegistry {
-    struct Institution {
-        string name;
-        string domain;
-        string accreditationId;
-        uint256 registrationTime;
-        bool isRegistered;
-        bool isAccredited;
-        address[] authorizedWallets;
-        string metadata;
-    }
-    
-    mapping(address => Institution) public institutions;
-    mapping(string => address) public domainToInstitution;
-}
-```
-
-#### Duplicate Registration Handling
-The smart contract prevents duplicate registrations through:
-1. **Domain uniqueness check**: `require(!registeredDomains[_domain], "Domain already taken")`
-2. **Registration status check**: `require(!institutions[msg.sender].isRegistered, "Already registered")`
-
-If an already registered institution attempts to register again, the transaction will revert with the error message "Already registered".
-
-#### Self-Accreditation (Demo vs Production)
-
-| Aspect | Demo Mode | Production Mode |
-|--------|-----------|-----------------|
-| Accreditation Authority | Self-accreditation | External accreditation authority |
-| Verification | No verification required | Government/ministry verification |
-| Use Case | Testing and development | Real-world deployment |
-| Implementation | `selfAccredit()` function | `updateAccreditation()` by authority |
-
-**In Production:**
-- Only authorized accreditation bodies (e.g., Ministry of Education) can update accreditation status
-- Institutions submit documentation to accreditation authorities
-- Verification process involves manual review and approval
-- The `updateAccreditation()` function would have access control:
-```solidity
-function updateAccreditation(address _institutionAddress, bool _isAccredited) 
-    external 
-    onlyAccreditationAuthority  // Only government/authorized body
-{
-    // ... update logic
-}
-```
 
 ---
 
@@ -245,7 +198,7 @@ function updateAccreditation(address _institutionAddress, bool _isAccredited)
 | Styling | Tailwind CSS |
 | Blockchain | Ethers.js v5 |
 | IPFS | Pinata API |
-| Encryption | Web Crypto API (AES-256-GCM) |
+| Encryption | Web Crypto API (AES-256-GCM + PBKDF2) |
 | Wallet | MetaMask |
 
 ### 4.2 Page Structure
@@ -257,16 +210,16 @@ function updateAccreditation(address _institutionAddress, bool _isAccredited)
 
 #### Institution Registration (`/institution`)
 - Register university details (name, domain)
-- Auto-generated accreditation ID (read-only, format: ACC-XXXXXX-YYYY)
-- Self-accreditation for demo (with explanation of production mode)
+- Auto-generated accreditation ID
+- Self-accreditation for demo
 - Add authorized wallets
-- Duplicate registration prevention with error message
 
 #### Issuer Dashboard (`/issuer`)
-- Issue new academic records
-- Upload student data (encrypted)
-- View issued records
-- Revoke records
+- **NEW**: Issue new academic records with dual-layer data
+- Public fields: Name, Program, Enrollment Status, Degree
+- Private fields: GPA, Grades, Minor, Concentration, Transcript
+- Off-chain only: Disciplinary Records
+- Set student secret key for private data access
 
 #### Records Management (`/records`)
 - View all issued records
@@ -274,81 +227,146 @@ function updateAccreditation(address _institutionAddress, bool _isAccredited)
 - Revoke functionality
 
 #### Verifier Dashboard (`/verifier`)
-- Input record hash or metadata
-- Query blockchain for validity
-- View record details and status
+- **NEW**: Input record hash
+- **NEW**: Optional secret key for private data
+- Shows public data always
+- Shows private data when secret key provided
 
-### 4.3 Key Components
+---
 
+## 5. Public/Private Credential System
+
+### 5.1 Overview
+
+This system implements a **dual-layer credential system** that separates publicly verifiable information from sensitive private data.
+
+### 5.2 Data Categories
+
+#### Public Data (On-Chain Metadata)
+**Visible to everyone without any secret key:**
+
+| Field | Description |
+|-------|-------------|
+| Full Legal Name | Student's full legal name |
+| Program/Major | Academic program or major |
+| Enrollment Status | active, graduated, completed, suspended |
+| Degree Awarded | Type of degree granted |
+
+**Storage**: Stored directly in the smart contract metadata (visible on blockchain explorers)
+
+#### Private Data (Encrypted IPFS)
+**Requires student's secret key to decrypt:**
+
+| Field | Description |
+|-------|-------------|
+| GPA | Cumulative grade point average |
+| Course Grades | Per-course grades with semester details |
+| Minor | Academic minor (if any) |
+| Concentration | Area of concentration |
+| Graduation Date | Date of graduation |
+| Transcript Details | Additional transcript information |
+
+**Storage**: Encrypted with AES-256-GCM using PBKDF2-derived key from student's secret
+
+#### Off-Chain Only Data (Encrypted IPFS - No Hash)
+**Never stored on blockchain (GDPR "right to be forgotten"):**
+
+| Field | Description |
+|-------|-------------|
+| Disciplinary Records | Sensitive disciplinary information |
+
+**Storage**: Encrypted in IPFS but never referenced in on-chain hash - can be deleted without affecting blockchain
+
+### 5.3 Secret Key System
+
+#### How It Works
+
+1. **Key Generation**:
+   - Student sets a password (minimum 6 characters)
+   - PBKDF2 derives a 256-bit AES key (100,000 iterations)
+   - Key is used to encrypt private data before IPFS upload
+
+2. **Data Access**:
+   - Without secret key: Only public on-chain data visible
+   - With secret key: Decrypts IPFS data and reveals private fields
+
+3. **Key Distribution**:
+   - Institution provides secret key to student after issuance
+   - Student shares key with trusted parties (employers, other universities)
+   - Student can change key anytime (re-issue with new key)
+
+### 5.4 Verification Modes
+
+#### Mode 1: Basic Verification (No Secret Key)
 ```
-frontend/
-├── app/
-│   ├── page.tsx              # Landing page
-│   ├── layout.tsx            # Root layout with Navbar
-│   ├── institution/page.tsx  # Institution registration
-│   ├── issuer/page.tsx       # Issue records
-│   ├── records/page.tsx      # Manage records
-│   └── verifier/page.tsx     # Verify records
-├── components/
-│   ├── Navbar.tsx            # Navigation
-│   └── LoadingSpinner.tsx    # Loading states
-├── context/
-│   └── WalletContext.tsx    # Wallet state management
-└── lib/
-    ├── contract.ts           # Contract interaction
-    ├── encryption.ts         # AES-256-GCM encryption
-    └── ipfs.ts              # IPFS upload/download
+Input: Record Hash
+Output:
+  ✓ Record Valid/Invalid
+  ✓ Full Legal Name
+  ✓ Program/Major
+  ✓ Enrollment Status
+  ✓ Degree Awarded
+```
+
+#### Mode 2: Full Verification (With Secret Key)
+```
+Input: Record Hash + Secret Key
+Output: (Everything in Mode 1) PLUS:
+  ✓ GPA
+  ✓ Course Grades (table format)
+  ✓ Minor/Concentration
+  ✓ Graduation Date
+  ✓ Transcript Details
+  ✓ Disciplinary Records (if any)
 ```
 
 ---
 
-## 5. Security Implementation
+## 6. Security Implementation
 
-### 5.1 Encryption (AES-256-GCM)
+### 6.1 Encryption (AES-256-GCM + PBKDF2)
 
-The system uses **AES-256-GCM** (Galois/Counter Mode) for encrypting academic records:
+The system uses **AES-256-GCM** with **PBKDF2** key derivation for encrypting private academic records:
 
 ```typescript
-// Key generation
-const key = await crypto.subtle.generateKey(
-    { name: 'AES-GCM', length: 256 },
-    true,
-    ['encrypt', 'decrypt']
+// Derive key from password (student's secret)
+const key = await deriveKeyFromPassword(
+  secretKey,      // Student's chosen password
+  salt            // Random 16-byte salt
 );
 
-// Encryption
-const encryptedData = await crypto.subtle.encrypt(
-    { name: 'AES-GCM', iv: iv },
-    key,
-    encodedData
+// Encrypt private data
+const encryptedData = await encryptData(
+  privateRecord,
+  key,
+  iv
 );
 ```
 
 **Security Properties:**
-- **Confidentiality**: 256-bit key provides strong encryption
-- **Integrity**: GCM mode includes authentication tag
+- **AES-256-GCM**: Industry-standard authenticated encryption
+- **PBKDF2**: 100,000 iterations for brute-force protection
+- **Unique Salt**: Each record uses a random salt
 - **Random IV**: Each encryption uses unique 12-byte IV
-- **Non-reusability**: Same plaintext produces different ciphertext
+- **Non-reusability**: Same data produces different ciphertext
 
-### 5.2 On-Chain Data Privacy
+### 6.2 On-Chain Data Privacy
 
-**What is stored on-chain:**
+**What is stored on-chain (PUBLIC):**
 - keccak256 hash of encrypted record
 - Issuer address
 - Timestamp
-- Metadata (student ID, degree - not sensitive)
+- Public metadata (name, degree, program, enrollment status)
 
-**What is stored off-chain (IPFS):**
-- Encrypted student records
-- Full transcript data
-- Sensitive information
+**What is stored off-chain (PRIVATE):**
+- Encrypted GPA, grades, transcript
+- Encrypted minor, concentration, graduation date
 
-**Why this approach:**
-- No PII on blockchain = GDPR compliant
-- Hash provides tamper evidence
-- Deleting off-chain data makes hash meaningless
+**What is stored off-chain only (NEVER ON-CHAIN):**
+- Encrypted disciplinary records
+- No hash reference - can be deleted for GDPR compliance
 
-### 5.3 Access Control
+### 6.3 Access Control
 
 ```solidity
 // Only authorized issuers can issue records
@@ -366,22 +384,37 @@ function revokeRecord(bytes32 _recordHash) external onlyAuthorized {
 
 ---
 
-## 6. IPFS Integration
+## 7. IPFS Integration
 
-### 6.1 Overview
+### 7.1 Overview
 The InterPlanetary File System (IPFS) provides distributed storage for encrypted academic records.
 
-### 6.2 Upload Flow
+### 7.2 Data Structure
 
-```
-1. User submits record data
-2. Frontend encrypts with AES-256-GCM
-3. Encrypted data uploaded to IPFS (via Pinata)
-4. IPFS returns Content Identifier (CID)
-5. CID stored with record hash on blockchain
+```typescript
+interface FullRecordData {
+  public: {
+    fullLegalName: string;
+    programMajor: string;
+    enrollmentStatus: string;
+    degreeAwarded: string;
+    issueDate: string;
+    cid: string;
+  };
+  private: {
+    encryptedData: string;  // AES-256-GCM encrypted
+    iv: string;
+    salt: string;           // For PBKDF2 key derivation
+  };
+  offChain: {
+    encryptedData: string;  // Disciplinary records
+    iv: string;
+    salt: string;
+  };
+}
 ```
 
-### 6.3 Pinata Integration
+### 7.3 Pinata Integration
 
 ```typescript
 // Upload to IPFS via Pinata
@@ -396,85 +429,82 @@ const response = await fetch('https://api.pinata.cloud/pinning/pinFileToIPFS', {
     },
     body: formData,
 });
-
-// Returns: { IpfsHash: "Qm...", PinSize: ... }
-```
-
-### 6.4 Data Retrieval
-
-```typescript
-// Retrieve from IPFS
-async function getFromIPFS(cid: string) {
-    const url = `https://gateway.pinata.cloud/ipfs/${cid}`;
-    const response = await fetch(url);
-    return await response.json();
-}
 ```
 
 ---
 
-## 7. Workflow Demonstration
+## 8. Workflow Demonstration
 
-### 7.1 Issue Record Workflow
+### 8.1 Issue Record Workflow
 
 ```
 Step 1: Institution Registration
 ├── Connect MetaMask wallet
 ├── Navigate to /institution
-├── Fill registration form (name, domain, accreditation)
-├── Submit transaction
-└── Institution registered on blockchain
+├── Register institution details
+└── Get authorized as issuer
 
 Step 2: Issue Academic Record
 ├── Connect as authorized issuer
 ├── Navigate to /issuer
-├── Fill record form (student ID, name, degree, GPA)
+├── Fill PUBLIC fields (name, program, degree)
+├── Fill PRIVATE fields (GPA, grades)
+├── Set STUDENT SECRET KEY
 ├── Submit record
-│   ├── Frontend encrypts data (AES-256-GCM)
-│   ├── Upload encrypted data to IPFS
-│   ├── Get CID from IPFS
-│   ├── Compute keccak256 hash
-│   └── Send transaction to RecordRegistry
-└── Record issued and hash stored on-chain
+│   ├── Encrypt private data with secret key
+│   ├── Upload to IPFS
+│   ├── Store public on-chain
+│   └── Compute keccak256 hash
+└── Student receives their secret key
 ```
 
-### 7.2 Verification Workflow
+### 8.2 Verification Workflow (Without Secret)
 
 ```
 Step 1: Query Record
-├── Verifier navigates to /verifier
-├── Enters record hash or metadata
-├── System queries blockchain
-└── Returns record status
+├── Navigate to /verifier
+├── Enter record hash
+└── System queries blockchain
 
-Step 2: Verify Authenticity
-├── Check if record exists
-├── Check if record is valid (not revoked)
-├── Verify issuer is authorized
-└── Confirm hash matches
+Step 2: View Public Data
+├── Shows: Name, Program, Enrollment Status, Degree
+└── Verification complete
 ```
 
-### 7.3 Revocation Workflow
+### 8.3 Verification Workflow (With Secret)
+
+```
+Step 1: Query Record
+├── Navigate to /verifier
+├── Enter record hash
+└── System shows public data
+
+Step 2: Decrypt Private Data
+├── Click "Have a secret key?"
+├── Enter student's secret key
+├── System decrypts IPFS data
+└── Shows: GPA, Grades, Transcript, etc.
+```
+
+### 8.4 Revocation Workflow
 
 ```
 Step 1: Initiate Revocation
 ├── Issuer navigates to /records
 ├── Locates record to revoke
-├── Clicks "Revoke" button
-└── Confirmation prompt
+└── Clicks "Revoke"
 
 Step 2: Execute Revocation
 ├── Send transaction to revokeRecord()
 ├── Smart contract marks record as invalid
-├── Emits Revoked event
-└── Record status updated
+└── Any verification after this returns invalid
 ```
 
 ---
 
-## 8. Deployment Guide
+## 9. Deployment Guide
 
-### 8.1 Prerequisites
+### 9.1 Prerequisites
 
 | Requirement | Version |
 |-------------|---------|
@@ -483,11 +513,15 @@ Step 2: Execute Revocation
 | MetaMask | Latest |
 | Pinata Account | Free tier |
 
-### 8.2 Environment Setup
+### 9.2 Environment Setup
 
 ```bash
-# Clone and install dependencies
+# Install backend dependencies
 cd prototype
+npm install
+
+# Install frontend dependencies
+cd frontend
 npm install
 
 # Configure environment variables
@@ -496,23 +530,25 @@ NEXT_PUBLIC_PINATA_API_KEY=your_api_key
 NEXT_PUBLIC_PINATA_SECRET_KEY=your_secret_key
 ```
 
-### 8.3 Smart Contract Deployment
+### 9.3 Running Locally
 
 ```bash
-# Using Hardhat
-npx hardhat compile
-npx hardhat run scripts/deploy.js --network sepolia
-```
+# Terminal 1: Start blockchain
+cd prototype
+npm run node
 
-### 8.4 Frontend Deployment
+# Terminal 2: Deploy contracts
+cd prototype
+npm run deploy
 
-```bash
+# Terminal 3: Start frontend
 cd frontend
 npm run dev
+
 # Access at http://localhost:3000
 ```
 
-### 8.5 Testing on Sepolia Testnet
+### 9.4 Testing on Sepolia Testnet
 
 1. Get test ETH from Sepolia faucet
 2. Configure MetaMask to Sepolia network
@@ -522,17 +558,17 @@ npm run dev
 
 ---
 
-## 9. Evaluation Metrics
+## 10. Evaluation Metrics
 
-### 9.1 Tamper Resistance
+### 10.1 Tamper Resistance
 
-| Test | Expected Result | Pass |
-|------|-----------------|------|
-| Issue record → Verify valid | Record shows as valid | ✅ |
-| Modify record → Verify | Hash mismatch detected | ✅ |
-| Revoke record → Verify | Record shows as invalid | ✅ |
+| Test | Expected Result |
+|------|-----------------|
+| Issue record → Verify valid | Record shows as valid |
+| Modify record → Verify | Hash mismatch detected |
+| Revoke record → Verify | Record shows as invalid |
 
-### 9.2 Gas Consumption (Estimated)
+### 10.2 Gas Consumption
 
 | Operation | Estimated Gas |
 |-----------|---------------|
@@ -540,52 +576,58 @@ npm run dev
 | Revoke Record | ~50,000 gas |
 | Verify Record | ~0 gas (view function) |
 
-### 9.3 Confidentiality
+### 10.3 Confidentiality
 
 | Metric | Result |
 |--------|--------|
-| PII on Chain | None |
-| Encrypted Data | AES-256-GCM |
+| PII on Chain | None (public only) |
+| Private Data | AES-256-GCM + PBKDF2 |
 | Key Management | Student-controlled |
-| GDPR Compliant | Yes |
+| GDPR Compliant | Yes (off-chain deletion supported) |
 
-### 9.4 Performance
+### 10.4 Performance
 
 | Operation | Response Time |
 |-----------|---------------|
-| Record Issuance | ~15 seconds (block confirmation) |
-| Record Verification | <1 second |
+| Record Issuance | ~15 seconds |
+| Public Verification | <1 second |
+| Private Verification | ~2-3 seconds (decryption) |
 | IPFS Upload | ~3-5 seconds |
 
 ---
 
-## 10. Conclusion
+## 11. Conclusion
 
-### 10.1 Summary
+### 11.1 Summary
 This hybrid blockchain system successfully demonstrates:
 
 1. **Secure Storage**: Academic records encrypted with AES-256-GCM before IPFS storage
 2. **Tamper Evidence**: keccak256 hashes on blockchain prevent modification
 3. **Trustless Verification**: Anyone can verify records without permission
-4. **Privacy Compliance**: No PII stored on-chain (GDPR compliant)
-5. **Revocation Support**: Issuers can revoke invalid records
+4. **Dual-Layer Privacy**: Public vs private credential separation
+5. **Student Sovereignty**: Student controls their secret key
+6. **GDPR Compliance**: Off-chain-only data can be deleted
+7. **Revocation Support**: Issuers can revoke invalid records
 
-### 10.2 Comparison with Existing Solutions
+### 11.2 Comparison with Existing Solutions
 
 | Feature | Blockcerts | EduCTX | Our Hybrid Model |
 |---------|------------|--------|------------------|
-| Data Storage | External | On-chain (opaque) | IPFS (encrypted) |
+| Data Storage | External | On-chain | IPFS (encrypted) |
 | Student Control | Partial | None | Full |
+| Public/Private | No | No | Yes |
+| Secret Key Access | No | No | Yes |
 | GDPR Compliance | Partial | Partial | Full |
 | Interoperability | Limited | Consortium | Global |
 
-### 10.3 Future Enhancements
+### 11.3 Future Enhancements
 
 1. **Zero-Knowledge Proofs**: Enable verification without revealing data
 2. **DID Integration**: Student-controlled decentralized identities
 3. **Multi-Chain Support**: Deploy on multiple blockchains
 4. **Batch Issuance**: Issue multiple records in one transaction
-5. **Offline Verification**: QR code-based verification
+5. **QR Code Verification**: Offline verification via QR codes
+6. **Revocable Shares**: Time-limited access to private data
 
 ---
 
@@ -597,35 +639,12 @@ This hybrid blockchain system successfully demonstrates:
 |----------|---------|
 | RecordRegistry | `0x...` |
 | InstitutionRegistry | `0x...` |
-
-## Appendix B: API Reference
-
-### Smart Contract Functions
-
-#### RecordRegistry
-```solidity
-// Issue a new record
-function issueRecord(bytes32 _recordHash, string calldata _metadata) external onlyAuthorized;
-
-// Revoke a record  
-function revokeRecord(bytes32 _recordHash) external onlyAuthorized;
-
-// Verify a record
-function getRecordStatus(bytes32 _recordHash) external view returns (bool, address, uint256, string);
-```
-
-#### InstitutionRegistry
-```solidity
-// Register an institution
-function registerInstitution(string calldata _name, string calldata _domain, string calldata _accreditationId, string calldata _metadata) external;
-
-// Add authorized wallet
-function addAuthorizedWallet(address _wallet) external onlyRegistered;
-```
+| StudentIdentity | `0x...` |
+| VerificationLog | `0x...` |
 
 ---
 
-*Document Version: 1.0*
-*Last Updated: 2024*
+*Document Version: 2.0*
+*Last Updated: 2026*
 *Project: Hybrid Blockchain System for Academic Records*
 

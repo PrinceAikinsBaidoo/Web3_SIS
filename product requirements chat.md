@@ -1,15 +1,3 @@
-AUC
-Operating characteristics
-
-
-
-
-
-
-
-
-
-
 
 3
 Last Saturday

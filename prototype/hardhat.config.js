@@ -1,5 +1,10 @@
-require("dotenv").config({ path: require("path").join(__dirname, "..", ".env") });
+const path = require("path");
+require("dotenv").config({ path: path.join(__dirname, ".env.local") });
+require("dotenv").config({ path: path.join(__dirname, ".env") });
 require("@nomicfoundation/hardhat-toolbox");
+
+const sepoliaPrivateKey = process.env.SEPOLIA_PRIVATE_KEY || "";
+const sepoliaAccounts = sepoliaPrivateKey ? [sepoliaPrivateKey] : [];
 
 /** @type import('hardhat/config').HardhatUserConfig */
 module.exports = {
@@ -17,8 +22,8 @@ module.exports = {
       chainId: 31337
     },
     sepolia: {
-      url: "https://ethereum-sepolia-rpc.publicnode.com",
-      accounts: [process.env.SEPOLIA_PRIVATE_KEY || ""]
+      url: process.env.RPC_URL || "https://ethereum-sepolia-rpc.publicnode.com",
+      accounts: sepoliaAccounts
     },
     localhost: {
       url: "http://127.0.0.1:8545"
