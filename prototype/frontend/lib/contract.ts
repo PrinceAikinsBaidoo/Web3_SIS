@@ -95,15 +95,16 @@ const INSTITUTION_REGISTRY_ABI = [
 
 // Contract addresses from environment (with fallback defaults)
 const CONTRACT_ADDRESSES = {
-  recordRegistry: process.env.NEXT_PUBLIC_RECORD_REGISTRY_ADDRESS || '0x7FbC5257a73b51Fd01859cd50C7A1eAA5E476EA1',
-  studentIdentity: process.env.NEXT_PUBLIC_STUDENT_IDENTITY_ADDRESS || '0x1ADE0d732e29f82041a6FB04F7C420fa06f3Ce3a',
-  verificationLog: process.env.NEXT_PUBLIC_VERIFICATION_LOG_ADDRESS || '0x09dDF1069F2b01Ab6217DC5710ea47D5de6883D5',
-  institutionRegistry: process.env.NEXT_PUBLIC_INSTITUTION_REGISTRY_ADDRESS || '0xcd454b704FED5744893874D70DE1A3F3C0858407'
+  recordRegistry: process.env.NEXT_PUBLIC_RECORD_REGISTRY || '0x9fE46736679d2D9a65F0992F2272dE9f3c7fa6e0',
+  studentIdentity: process.env.NEXT_PUBLIC_STUDENT_IDENTITY || '0xCf7Ed3AccA5a467e9e704C703E8D87F634fB0Fc9',
+  verificationLog: process.env.NEXT_PUBLIC_VERIFICATION_LOG || '0xDc64a140Aa3E981100a9becA4E685f962f0cF6C9',
+  institutionRegistry: process.env.NEXT_PUBLIC_INSTITUTION_REGISTRY || '0xe7f1725E7734CE288F8367e1Bb143E90bb3F0512'
 }
 
-const DEFAULT_RPC_URL = process.env.NEXT_PUBLIC_RPC_URL || 'https://ethereum-sepolia-rpc.publicnode.com'
+const DEFAULT_RPC_URL = process.env.NEXT_PUBLIC_RPC_URL || 'http://127.0.0.1:8545'
 
 // Types
+
 export interface Record {
   recordHash: string
   issuer: string
@@ -146,6 +147,11 @@ export interface Institution {
   isRegistered: boolean
   isAccredited: boolean
   metadata: string
+}
+
+// Extended institution info with authorized wallets
+export interface InstitutionDetails extends Institution {
+  authorizedWallets: string[]
 }
 
 class ContractService {
@@ -469,6 +475,51 @@ class ContractService {
     }
   }
 
+  // Get full institution details including authorized wallets
+  async getInstitutionDetails(address: string): Promise<InstitutionDetails | null> {
+    const contract = this.getInstitutionRegistry()
+    const isRegistered = await contract.isRegistered(address)
+    
+    if (!isRegistered) {
+      return null
+    }
+
+    const [name, domain, isAccredited, walletCount] = await contract.getInstitutionInfo(address)
+    const authorizedWallets = await contract.getAuthorizedWallets(address)
+    
+    // Get raw institution data for registration time and metadata
+    const rawData = await contract.institutions(address)
+    
+    return {
+      name,
+      domain,
+      accreditationId: rawData.accreditationId,
+      registrationTime: rawData.registrationTime.toNumber(),
+      isRegistered: true,
+      isAccredited,
+      metadata: rawData.metadata,
+      authorizedWallets
+    }
+  }
+
+  // Get institution by wallet address (find which institution this wallet belongs to)
+  async getInstitutionByWallet(walletAddress: string): Promise<InstitutionDetails | null> {
+    const contract = this.getInstitutionRegistry()
+    const count = await contract.getInstitutionCount()
+    
+    for (let i = 0; i < count; i++) {
+      const institutionAddress = await contract.registeredInstitutions(i)
+      const authorizedWallets = await contract.getAuthorizedWallets(institutionAddress)
+      
+      // Check if the wallet is authorized for this institution
+      if (authorizedWallets.includes(walletAddress)) {
+        return this.getInstitutionDetails(institutionAddress)
+      }
+    }
+    
+    return null
+  }
+
   // Self-accredit institution (for demo)
   async selfAccredit(signer: ethers.Signer, accreditationId: string): Promise<ethers.ContractTransaction> {
     const contract = this.getInstitutionRegistryWithSigner(signer)
@@ -511,4 +562,3 @@ export const contractService = new ContractService()
 
 // Export types
 export type { ContractService }
-
