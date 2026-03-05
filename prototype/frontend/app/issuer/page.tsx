@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { contractService } from '@/lib/contract'
+import { contractService, InstitutionDetails } from '@/lib/contract'
 import { useWallet } from '@/context/WalletContext'
 import { ethers } from 'ethers'
 import { DelayedLoading } from '@/components/LoadingSpinner'
@@ -25,7 +25,7 @@ interface StudentRecord {
   degreeAwarded: string
   
   // Private (encrypted in IPFS with secret key)
-  gpa: number
+  cwa: number
   grades: CourseGrade[]
   minor?: string
   concentration?: string
@@ -42,6 +42,9 @@ export default function IssuerDashboard() {
   const [isLoading, setIsLoading] = useState(false)
   const [status, setStatus] = useState<{ type: 'success' | 'error' | 'info'; message: string } | null>(null)
   
+  // ===== INSTITUTION INFO (fetched from blockchain) =====
+  const [institutionInfo, setInstitutionInfo] = useState<InstitutionDetails | null>(null)
+  
   // ===== PUBLIC FIELDS (stored on-chain) =====
   const [fullLegalName, setFullLegalName] = useState('')
   const [programMajor, setProgramMajor] = useState('')
@@ -49,7 +52,7 @@ export default function IssuerDashboard() {
   const [degreeAwarded, setDegreeAwarded] = useState('')
   
   // ===== PRIVATE FIELDS (encrypted in IPFS, requires secret) =====
-  const [gpa, setGpa] = useState('')
+  const [cwa, setCwa] = useState('')
   const [minor, setMinor] = useState('')
   const [concentration, setConcentration] = useState('')
   const [graduationDate, setGraduationDate] = useState('')
@@ -81,6 +84,13 @@ export default function IssuerDashboard() {
     try {
       const authorized = await contractService.isAuthorizedIssuer(wallet.address)
       setIsAuthorized(authorized)
+      
+      // Fetch institution info if authorized
+      if (authorized) {
+        const instInfo = await contractService.getInstitutionByWallet(wallet.address)
+        setInstitutionInfo(instInfo)
+      }
+      
       setStatus({ 
         type: 'info', 
         message: authorized 
@@ -162,7 +172,7 @@ export default function IssuerDashboard() {
 
       // ===== Step 2: Create PRIVATE data object (for IPFS with secret) =====
       const privateData = {
-        gpa: parseFloat(gpa) || 0,
+        cwa: parseFloat(cwa) || 0,
         grades,
         minor: minor || null,
         concentration: concentration || null,
@@ -223,6 +233,9 @@ export default function IssuerDashboard() {
         programMajor,
         enrollmentStatus,
         degreeAwarded,
+        // Institution info (auto-filled from registered institution)
+        institutionName: institutionInfo?.name || '',
+        institutionDomain: institutionInfo?.domain || '',
         // Reference to IPFS (contains encrypted private data)
         cid: ipfsCid,
         ipfsGateway: `https://gateway.pinata.cloud/ipfs/${ipfsCid}`,
@@ -246,7 +259,7 @@ export default function IssuerDashboard() {
 🔑 IMPORTANT - Share with student:
 - Secret Key: ${secretKey}
 
-The student must share this secret key with anyone who needs to view private data (grades, GPA, etc).`
+The student must share this secret key with anyone who needs to view private data (grades, CWA, etc).`
       })
 
       // Clear form
@@ -264,7 +277,7 @@ The student must share this secret key with anyone who needs to view private dat
     setProgramMajor('')
     setEnrollmentStatus('active')
     setDegreeAwarded('')
-    setGpa('')
+    setCwa('')
     setGrades([])
     setMinor('')
     setConcentration('')
@@ -407,17 +420,17 @@ The student must share this secret key with anyone who needs to view private dat
                 <div className="grid md:grid-cols-2 gap-6">
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">
-                      GPA (0.0 - 4.0)
+                      CWA (0 - 100)
                     </label>
                     <input 
                       type="number" 
                       step="0.01"
                       min="0"
-                      max="4"
-                      value={gpa} 
-                      onChange={(e) => setGpa(e.target.value)} 
+                      max="100"
+                      value={cwa} 
+                      onChange={(e) => setCwa(e.target.value)} 
                       className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-primary-500" 
-                      placeholder="3.85" 
+                      placeholder="85.50" 
                     />
                   </div>
                   
@@ -592,7 +605,7 @@ The student must share this secret key with anyone who needs to view private dat
                 </div>
                 
                 <p className="text-sm text-gray-600 mb-4">
-                  The student must share this key with anyone who needs to view private information (grades, GPA, etc).
+                  The student must share this key with anyone who needs to view private information (grades, CWA, etc).
                   Keep this key secure - anyone with it can decrypt the private data.
                 </p>
                 

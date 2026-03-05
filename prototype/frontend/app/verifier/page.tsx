@@ -16,7 +16,7 @@ interface CourseGrade {
 }
 
 interface PrivateData {
-  gpa: number
+  cwa: number
   grades: CourseGrade[]
   minor: string | null
   concentration: string | null
@@ -137,7 +137,7 @@ export default function Verifier() {
       // Fetch the full record from IPFS
       const response = await fetch(`https://gateway.pinata.cloud/ipfs/${cid}`)
       if (!response.ok) {
-        throw new Error('Failed to fetch record from IPFS')
+        throw new Error(`Failed to fetch record from IPFS: ${response.status} ${response.statusText}`)
       }
       
       const fullData: FullRecordData = await response.json()
@@ -170,8 +170,19 @@ export default function Verifier() {
       }))
 
     } catch (err: any) {
-      console.error('Decryption error:', err)
-      setDecryptError('Failed to decrypt data. Please check your secret key.')
+      console.error('Decryption error details:', err)
+      // Provide more specific error messages
+      if (err.message.includes('Failed to fetch')) {
+        setDecryptError(`IPFS Error: ${err.message}`)
+      } else if (err.message.includes('Unsupported state')) {
+        setDecryptError('Decryption failed: Invalid secret key or corrupted data. Please check your secret key and try again.')
+      } else if (err.message.includes('The payload')) {
+        setDecryptError('Decryption failed: Invalid secret key format. Please ensure you are using the correct secret key.')
+      } else if (err.message.includes('OperationError')) {
+        setDecryptError('Decryption failed: The secret key is incorrect. Please verify and try again.')
+      } else {
+        setDecryptError(`Decryption failed: ${err.message || 'Unknown error. Please check your secret key.'}`)
+      }
     } finally {
       setIsDecrypting(false)
     }
@@ -343,6 +354,18 @@ export default function Verifier() {
                 </div>
                 
                 <div className="grid md:grid-cols-2 gap-4 text-sm">
+                  {result.record.parsedMetadata?.institutionName && (
+                    <div>
+                      <p className="text-gray-500">Institution</p>
+                      <p className="font-medium">{result.record.parsedMetadata.institutionName}</p>
+                    </div>
+                  )}
+                  {result.record.parsedMetadata?.institutionDomain && (
+                    <div>
+                      <p className="text-gray-500">Institution Domain</p>
+                      <p className="font-medium">{result.record.parsedMetadata.institutionDomain}</p>
+                    </div>
+                  )}
                   {result.record.parsedMetadata?.fullLegalName && (
                     <div>
                       <p className="text-gray-500">Full Legal Name</p>
@@ -399,10 +422,10 @@ export default function Verifier() {
                   </div>
                   
                   <div className="grid md:grid-cols-2 gap-4 text-sm">
-                    {result.privateData.gpa > 0 && (
+                    {result.privateData.cwa > 0 && (
                       <div>
-                        <p className="text-gray-500">GPA</p>
-                        <p className="font-medium text-lg">{result.privateData.gpa.toFixed(2)} / 4.0</p>
+                        <p className="text-gray-500">CWA</p>
+                        <p className="font-medium text-lg">{result.privateData.cwa.toFixed(2)} / 100</p>
                       </div>
                     )}
                     {result.privateData.graduationDate && (
@@ -500,7 +523,7 @@ export default function Verifier() {
         <ol className="text-blue-700 text-sm space-y-2">
           <li>1. Enter the record hash to verify basic credential information (public data)</li>
           <li>2. Public data (name, degree, program) is visible to everyone</li>
-          <li>3. If you have the student's secret key, enter it to decrypt private data (grades, GPA)</li>
+          <li>3. If you have the student's secret key, enter it to decrypt private data (grades, CWA)</li>
           <li>4. Any tampering with the original document will result in a different hash, causing verification to fail</li>
         </ol>
       </div>

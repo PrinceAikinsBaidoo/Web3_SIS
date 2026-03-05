@@ -135,7 +135,7 @@ async function runDemo() {
     studentName: 'John Doe',
     degree: 'Bachelor of Computer Science',
     graduationYear: '2024',
-    gpa: '3.85',
+    cwa: '85',
     issueDate: new Date().toISOString(),
     issuer: 'Demo University'
   };
