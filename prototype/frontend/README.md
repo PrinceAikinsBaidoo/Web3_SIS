@@ -19,7 +19,7 @@ Next.js frontend for the Hybrid Blockchain Academic Records System with public/p
 - Degree Awarded
 
 ### Private Data (Requires Secret Key)
-- GPA
+- CWA
 - Course Grades
 - Minor/Concentration
 - Graduation Date
@@ -146,7 +146,7 @@ InstitutionRegistry: 0x5FbDB2315678afecb367f032d93F642f64180aa3
 1. Connect your wallet (must be an authorized issuer)
 2. Navigate to "Issuer Dashboard"
 3. Fill **PUBLIC** fields (name, program, degree) - visible to everyone
-4. Fill **PRIVATE** fields (GPA, grades) - requires secret key
+4. Fill **PRIVATE** fields (CWA, grades) - requires secret key
 5. Set student's **SECRET KEY** (minimum 6 characters)
 6. Click "Issue Record"
 7. Confirm the transaction in MetaMask

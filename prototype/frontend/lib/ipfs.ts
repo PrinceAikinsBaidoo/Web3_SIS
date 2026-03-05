@@ -25,11 +25,12 @@ export interface IPFSRecord {
   studentName: string
   degree: string
   graduationYear: string
-  gpa: string
+  cwa: string
   issueDate: string
   issuer: string
   ipfsCid?: string
 }
+
 
 /**
  * Upload data to IPFS using Pinata
@@ -257,4 +258,3 @@ export default {
   getIPFSGatewayUrl,
   pinToIPFS
 }
-

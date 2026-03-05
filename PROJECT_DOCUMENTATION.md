@@ -217,7 +217,7 @@ Manages university/issuer registration, accreditation, and wallet authorization.
 #### Issuer Dashboard (`/issuer`)
 - **NEW**: Issue new academic records with dual-layer data
 - Public fields: Name, Program, Enrollment Status, Degree
-- Private fields: GPA, Grades, Minor, Concentration, Transcript
+- Private fields: CWA, Grades, Minor, Concentration, Transcript
 - Off-chain only: Disciplinary Records
 - Set student secret key for private data access
 
@@ -259,7 +259,7 @@ This system implements a **dual-layer credential system** that separates publicl
 
 | Field | Description |
 |-------|-------------|
-| GPA | Cumulative grade point average |
+| CWA | Cumulative weighted average |
 | Course Grades | Per-course grades with semester details |
 | Minor | Academic minor (if any) |
 | Concentration | Area of concentration |
@@ -312,7 +312,7 @@ Output:
 ```
 Input: Record Hash + Secret Key
 Output: (Everything in Mode 1) PLUS:
-  ✓ GPA
+  ✓ CWA
   ✓ Course Grades (table format)
   ✓ Minor/Concentration
   ✓ Graduation Date
@@ -359,7 +359,7 @@ const encryptedData = await encryptData(
 - Public metadata (name, degree, program, enrollment status)
 
 **What is stored off-chain (PRIVATE):**
-- Encrypted GPA, grades, transcript
+- Encrypted CWA, grades, transcript
 - Encrypted minor, concentration, graduation date
 
 **What is stored off-chain only (NEVER ON-CHAIN):**
@@ -448,7 +448,7 @@ Step 2: Issue Academic Record
 ├── Connect as authorized issuer
 ├── Navigate to /issuer
 ├── Fill PUBLIC fields (name, program, degree)
-├── Fill PRIVATE fields (GPA, grades)
+├── Fill PRIVATE fields (CWA, grades)
 ├── Set STUDENT SECRET KEY
 ├── Submit record
 │   ├── Encrypt private data with secret key
@@ -483,7 +483,7 @@ Step 2: Decrypt Private Data
 ├── Click "Have a secret key?"
 ├── Enter student's secret key
 ├── System decrypts IPFS data
-└── Shows: GPA, Grades, Transcript, etc.
+└── Shows: CWA, Grades, Transcript, etc.
 ```
 
 ### 8.4 Revocation Workflow

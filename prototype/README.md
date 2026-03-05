@@ -54,7 +54,7 @@ Visible to everyone without any secret key:
 
 ### Private Data (Encrypted IPFS)
 Requires student's secret key to decrypt:
-- GPA
+- CWA
 - Course Grades (per course)
 - Minor
 - Concentration
@@ -159,7 +159,7 @@ prototype/
 1. University registers as authorized issuer
 2. Fill in student details:
    - **Public fields** (name, degree, program) → stored on-chain
-   - **Private fields** (GPA, grades) → encrypted with student's secret key
+   - **Private fields** (CWA, grades) → encrypted with student's secret key
    - **Sensitive** (disciplinary) → encrypted, never on-chain
 3. Student receives their secret key from the institution
 
@@ -178,7 +178,7 @@ prototype/
 1. Enter record hash
 2. Enter student's secret key
 3. System decrypts private data:
-   - GPA
+   - CWA
    - Course Grades
    - Minor/Concentration
    - Graduation Date
