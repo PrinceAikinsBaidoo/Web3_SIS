@@ -354,4 +354,22 @@ contract InstitutionRegistry {
     function isAccredited(address _address) external view returns (bool) {
         return institutions[_address].isRegistered && institutions[_address].isAccredited;
     }
+
+    /**
+     * @dev Check if a wallet is authorized for ANY registered institution
+     * @param _wallet Wallet address to check
+     * @return bool Whether the wallet is authorized for any institution
+     */
+    function isWalletAuthorizedForAny(address _wallet) external view returns (bool) {
+        for (uint i = 0; i < registeredInstitutions.length; i++) {
+            address institution = registeredInstitutions[i];
+            Institution storage inst = institutions[institution];
+            for (uint j = 0; j < inst.authorizedWallets.length; j++) {
+                if (inst.authorizedWallets[j] == _wallet) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
 }

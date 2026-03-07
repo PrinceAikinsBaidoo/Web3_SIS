@@ -16,8 +16,11 @@ interface CourseGrade {
 }
 
 interface PrivateData {
-  cwa: number
-  grades: CourseGrade[]
+  studentId: string | null
+  dateOfBirth: string | null
+  email: string | null
+  cwa: number | null
+  grades: CourseGrade[] | null
   minor: string | null
   concentration: string | null
   graduationDate: string | null
@@ -28,19 +31,8 @@ interface OffChainData {
   disciplinaryRecords: string | null
 }
 
-interface PublicData {
-  fullLegalName: string
-  programMajor: string
-  enrollmentStatus: string
-  degreeAwarded: string
-  issueDate: string
-  cid: string
-  hasPrivateData: boolean
-  hasOffChainData: boolean
-}
-
 interface FullRecordData {
-  public: PublicData
+  public: any
   private: {
     encryptedData: string
     iv: string
@@ -59,25 +51,8 @@ export default function Verifier() {
   const [result, setResult] = useState<{ valid: boolean; record?: RecordWithMetadata; privateData?: PrivateData; offChainData?: OffChainData } | null>(null)
   const [isLoading, setIsLoading] = useState(false)
   const [isDecrypting, setIsDecrypting] = useState(false)
-  const [isDelayedLoading, setIsDelayedLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [showSecretInput, setShowSecretInput] = useState(false)
   const [decryptError, setDecryptError] = useState<string | null>(null)
-
-  // Track delayed loading state
-  useEffect(() => {
-    let timeout: NodeJS.Timeout
-    if (isLoading) {
-      timeout = setTimeout(() => {
-        setIsDelayedLoading(true)
-      }, 2000)
-    } else {
-      setIsDelayedLoading(false)
-    }
-    return () => {
-      if (timeout) clearTimeout(timeout)
-    }
-  }, [isLoading])
 
   const verifyRecord = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -96,7 +71,6 @@ export default function Verifier() {
       // Validate hash format
       let hash = recordHash.trim()
       if (!hash.startsWith('0x')) {
-        // If user enters plain text, hash it
         hash = ethers.utils.keccak256(ethers.utils.toUtf8Bytes(hash))
       }
 
@@ -108,9 +82,9 @@ export default function Verifier() {
         record: verificationResult.record
       })
 
-      // If secret key is provided, try to decrypt private data
-      if (secretKey && verificationResult.record?.parsedMetadata?.cid) {
-        await decryptPrivateData(verificationResult.record.parsedMetadata.cid)
+      // If secret key is provided, automatically decrypt private data
+      if (secretKey && verificationResult.record?.parsedMetadata?.ipfsCid) {
+        await decryptPrivateData(verificationResult.record.parsedMetadata.ipfsCid)
       }
 
     } catch (err: any) {
@@ -120,24 +94,19 @@ export default function Verifier() {
     }
   }
 
-  const decryptWithSecret = async () => {
-    if (!result?.record?.parsedMetadata?.cid) {
-      setDecryptError('No IPFS data to decrypt')
+  const decryptPrivateData = async (cid: string) => {
+    if (!secretKey) {
+      setDecryptError('Secret key required to decrypt private data')
       return
     }
 
-    await decryptPrivateData(result.record.parsedMetadata.cid)
-  }
-
-  const decryptPrivateData = async (cid: string) => {
     try {
       setIsDecrypting(true)
       setDecryptError(null)
 
-      // Fetch the full record from IPFS
       const response = await fetch(`https://gateway.pinata.cloud/ipfs/${cid}`)
       if (!response.ok) {
-        throw new Error(`Failed to fetch record from IPFS: ${response.status} ${response.statusText}`)
+        throw new Error(`Failed to fetch record from IPFS: ${response.status}`)
       }
       
       const fullData: FullRecordData = await response.json()
@@ -147,13 +116,11 @@ export default function Verifier() {
         return
       }
 
-      // Decrypt private data with the secret key
       const privateData = await decryptEncryptedRecordWithSecret<PrivateData>(
         fullData.private,
         secretKey
       )
 
-      // Decrypt off-chain data (disciplinary records)
       let offChainData: OffChainData | undefined
       if (fullData.offChain && fullData.offChain.salt) {
         offChainData = await decryptEncryptedRecordWithSecret<OffChainData>(
@@ -162,7 +129,6 @@ export default function Verifier() {
         )
       }
 
-      // Update result with decrypted private data
       setResult(prev => ({
         ...prev!,
         privateData,
@@ -170,18 +136,13 @@ export default function Verifier() {
       }))
 
     } catch (err: any) {
-      console.error('Decryption error details:', err)
-      // Provide more specific error messages
+      console.error('Decryption error:', err)
       if (err.message.includes('Failed to fetch')) {
         setDecryptError(`IPFS Error: ${err.message}`)
-      } else if (err.message.includes('Unsupported state')) {
-        setDecryptError('Decryption failed: Invalid secret key or corrupted data. Please check your secret key and try again.')
-      } else if (err.message.includes('The payload')) {
-        setDecryptError('Decryption failed: Invalid secret key format. Please ensure you are using the correct secret key.')
-      } else if (err.message.includes('OperationError')) {
-        setDecryptError('Decryption failed: The secret key is incorrect. Please verify and try again.')
+      } else if (err.message.includes('Unsupported state') || err.message.includes('OperationError')) {
+        setDecryptError('Decryption failed: Invalid secret key or corrupted data')
       } else {
-        setDecryptError(`Decryption failed: ${err.message || 'Unknown error. Please check your secret key.'}`)
+        setDecryptError(`Decryption failed: ${err.message || 'Unknown error'}`)
       }
     } finally {
       setIsDecrypting(false)
@@ -194,11 +155,7 @@ export default function Verifier() {
 
   const formatDate = (timestamp: number) => {
     return new Date(timestamp * 1000).toLocaleDateString('en-US', {
-      year: 'numeric',
-      month: 'long',
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit'
+      year: 'numeric', month: 'long', day: 'numeric'
     })
   }
 
@@ -211,104 +168,69 @@ export default function Verifier() {
         </p>
       </div>
 
-      {/* Search Form */}
+      {/* Main Form - Single Verify button does both if secret key provided */}
       <form onSubmit={verifyRecord} className="bg-white rounded-xl shadow-sm border p-6 mb-6">
-        <label className="block text-sm font-medium text-gray-700 mb-2">
-          Record Hash
-        </label>
-        <div className="flex gap-4 mb-4">
-          <input
-            type="text"
-            value={recordHash}
-            onChange={(e) => setRecordHash(e.target.value)}
-            className="flex-1 px-4 py-3 border rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 font-mono text-sm"
-            placeholder="0x..."
-          />
-          <button
-            type="submit"
-            disabled={isLoading}
-            className="px-6 py-3 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors font-medium disabled:opacity-50 flex items-center gap-2"
-          >
-            {isLoading ? (
-              <>
-                <DelayedLoading isLoading={isLoading} size="sm" color="white" />
-                <span>Verifying...</span>
-              </>
-            ) : (
-              'Verify'
-            )}
-          </button>
+        <div className="grid md:grid-cols-2 gap-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Record Hash
+            </label>
+            <input
+              type="text"
+              value={recordHash}
+              onChange={(e) => setRecordHash(e.target.value)}
+              className="w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-primary-500 font-mono text-sm"
+              placeholder="0x..."
+              required
+            />
+          </div>
+          
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Secret Key (Optional)
+            </label>
+            <input
+              type="password"
+              value={secretKey}
+              onChange={(e) => setSecretKey(e.target.value)}
+              className="w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-purple-500 font-mono text-sm"
+              placeholder="Enter to decrypt private data"
+            />
+          </div>
         </div>
         
-        {/* Secret Key Toggle */}
-        <div className="border-t pt-4">
-          <button
-            type="button"
-            onClick={() => setShowSecretInput(!showSecretInput)}
-            className="text-sm text-purple-600 hover:text-purple-800 flex items-center gap-2"
-          >
-            {showSecretInput ? '▼' : '▶'} Have a secret key? Click to reveal private data
-          </button>
-          
-          {showSecretInput && (
-            <div className="mt-3 flex gap-4">
-              <input
-                type="password"
-                value={secretKey}
-                onChange={(e) => setSecretKey(e.target.value)}
-                className="flex-1 px-4 py-2 border rounded-lg focus:ring-2 focus:ring-purple-500 font-mono text-sm"
-                placeholder="Enter secret key to decrypt private data"
-              />
-              <button
-                type="button"
-                onClick={decryptWithSecret}
-                disabled={isDecrypting || !result?.record?.parsedMetadata?.cid}
-                className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:opacity-50 flex items-center gap-2"
-              >
-                {isDecrypting ? (
-                  <>
-                    <DelayedLoading isLoading={isDecrypting} size="sm" color="white" />
-                    <span>Decrypting...</span>
-                  </>
-                ) : (
-                  'Decrypt'
-                )}
-              </button>
-            </div>          )}
-        </div>
+        <button
+          type="submit"
+          disabled={isLoading || isDecrypting}
+          className="mt-4 w-full px-6 py-3 bg-primary-600 text-white rounded-lg hover:bg-primary-700 font-medium disabled:opacity-50 flex items-center justify-center gap-2"
+        >
+          {isLoading || isDecrypting ? (
+            <>
+              <DelayedLoading isLoading={true} size="sm" color="white" />
+              <span>{isDecrypting ? 'Verifying & Decrypting...' : 'Verifying...'}</span>
+            </>
+          ) : (
+            'Verify'
+          )}
+        </button>
+        
         <p className="text-sm text-gray-500 mt-2">
-          Enter the keccak256 hash of the academic record, or plain text to auto-hash
+          Enter the keccak256 hash of the record, or plain text to auto-hash. If secret key is provided, private data will be decrypted automatically.
         </p>
       </form>
 
       {/* Decrypt Error */}
       {decryptError && (
         <div className="bg-red-50 border border-red-200 rounded-xl p-4 mb-6">
-          <div className="flex items-center gap-3">
-            <div className="w-8 h-8 bg-red-100 rounded-full flex items-center justify-center flex-shrink-0">
-              <svg className="w-4 h-4 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
-              </svg>
-            </div>
-            <p className="text-red-700">{decryptError}</p>
-          </div>
+          <p className="text-red-700">{decryptError}</p>
         </div>
       )}
 
       {/* Error Message */}
       {error && (
         <div className="bg-red-50 border border-red-200 rounded-xl p-6 mb-6">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-red-100 rounded-full flex items-center justify-center flex-shrink-0">
-              <svg className="w-5 h-5 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-              </svg>
-            </div>
-            <div>
-              <h3 className="font-semibold text-red-900">Verification Failed</h3>
-              <p className="text-red-700">{error}</p>
-            </div>
-          </div>
+          <h3 className="font-semibold text-red-900">Verification Failed</h3>
+          <p className="text-red-700">{error}</p>
         </div>
       )}
 
@@ -332,79 +254,31 @@ export default function Verifier() {
                 {result.valid ? '✓ Record Verified' : '✗ Record Invalid'}
               </h2>
               <p className={result.valid ? 'text-green-700' : 'text-red-700'}>
-                {result.valid 
-                  ? 'This academic record is valid and has not been tampered with.' 
-                  : 'This record has been revoked or does not exist.'}
+                {result.valid ? 'This academic record is valid.' : 'This record has been revoked or does not exist.'}
               </p>
             </div>
           </div>
 
           {result.record && (
             <>
-              {/* PUBLIC DATA - Always Visible */}
+              {/* PUBLIC DATA */}
               <div className="bg-white rounded-lg border border-green-200 p-4 mb-4">
-                <div className="flex items-center gap-2 mb-3">
-                  <div className="w-8 h-8 bg-green-100 rounded-lg flex items-center justify-center">
-                    <svg className="w-4 h-4 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3.055 11H5a2 2 0 012 2v1a2 2 0 002 2 2 2 0 012 2v2.945M8 3.935V5.5A2.5 2.5 0 0010.5 8h.5a2 2 0 012 2 2 2 0 104 0 2 2 0 012-2h1.064M15 20.488V18a2 2 0 012-2h3.064M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                    </svg>
-                  </div>
-                  <h3 className="font-semibold text-gray-900">Public Information</h3>
-                  <span className="text-xs bg-green-100 text-green-700 px-2 py-1 rounded">Visible to everyone</span>
-                </div>
-                
+                <h3 className="font-semibold text-gray-900 mb-3">Public Information</h3>
                 <div className="grid md:grid-cols-2 gap-4 text-sm">
                   {result.record.parsedMetadata?.institutionName && (
-                    <div>
-                      <p className="text-gray-500">Institution</p>
-                      <p className="font-medium">{result.record.parsedMetadata.institutionName}</p>
-                    </div>
-                  )}
-                  {result.record.parsedMetadata?.institutionDomain && (
-                    <div>
-                      <p className="text-gray-500">Institution Domain</p>
-                      <p className="font-medium">{result.record.parsedMetadata.institutionDomain}</p>
-                    </div>
+                    <div><p className="text-gray-500">Institution</p><p className="font-medium">{result.record.parsedMetadata.institutionName}</p></div>
                   )}
                   {result.record.parsedMetadata?.fullLegalName && (
-                    <div>
-                      <p className="text-gray-500">Full Legal Name</p>
-                      <p className="font-medium">{result.record.parsedMetadata.fullLegalName}</p>
-                    </div>
+                    <div><p className="text-gray-500">Name</p><p className="font-medium">{result.record.parsedMetadata.fullLegalName}</p></div>
                   )}
                   {result.record.parsedMetadata?.programMajor && (
-                    <div>
-                      <p className="text-gray-500">Program/Major</p>
-                      <p className="font-medium">{result.record.parsedMetadata.programMajor}</p>
-                    </div>
-                  )}
-                  {result.record.parsedMetadata?.enrollmentStatus && (
-                    <div>
-                      <p className="text-gray-500">Enrollment Status</p>
-                      <span className={`inline-block px-2 py-1 rounded text-xs font-medium ${
-                        result.record.parsedMetadata.enrollmentStatus === 'active' ? 'bg-green-100 text-green-700' :
-                        result.record.parsedMetadata.enrollmentStatus === 'graduated' ? 'bg-blue-100 text-blue-700' :
-                        result.record.parsedMetadata.enrollmentStatus === 'completed' ? 'bg-gray-100 text-gray-700' :
-                        'bg-red-100 text-red-700'
-                      }`}>
-                        {result.record.parsedMetadata.enrollmentStatus.charAt(0).toUpperCase() + result.record.parsedMetadata.enrollmentStatus.slice(1)}
-                      </span>
-                    </div>
+                    <div><p className="text-gray-500">Program</p><p className="font-medium">{result.record.parsedMetadata.programMajor}</p></div>
                   )}
                   {result.record.parsedMetadata?.degreeAwarded && (
-                    <div>
-                      <p className="text-gray-500">Degree Awarded</p>
-                      <p className="font-medium">{result.record.parsedMetadata.degreeAwarded}</p>
-                    </div>
+                    <div><p className="text-gray-500">Degree</p><p className="font-medium">{result.record.parsedMetadata.degreeAwarded}</p></div>
                   )}
-                  <div>
-                    <p className="text-gray-500">Issuer Address</p>
-                    <p className="font-mono">{formatAddress(result.record.issuer)}</p>
-                  </div>
-                  <div>
-                    <p className="text-gray-500">Issue Date</p>
-                    <p>{formatDate(result.record.timestamp)}</p>
-                  </div>
+                  <div><p className="text-gray-500">Issuer</p><p className="font-mono text-xs">{formatAddress(result.record.issuer)}</p></div>
+                  <div><p className="text-gray-500">Issue Date</p><p>{formatDate(result.record.timestamp)}</p></div>
                 </div>
               </div>
 
@@ -422,7 +296,28 @@ export default function Verifier() {
                   </div>
                   
                   <div className="grid md:grid-cols-2 gap-4 text-sm">
-                    {result.privateData.cwa > 0 && (
+                    {/* Student Identification */}
+                    {result.privateData.studentId && (
+                      <div>
+                        <p className="text-gray-500">Student ID</p>
+                        <p className="font-medium">{result.privateData.studentId}</p>
+                      </div>
+                    )}
+                    {result.privateData.dateOfBirth && (
+                      <div>
+                        <p className="text-gray-500">Date of Birth</p>
+                        <p className="font-medium">{result.privateData.dateOfBirth}</p>
+                      </div>
+                    )}
+                    {result.privateData.email && (
+                      <div>
+                        <p className="text-gray-500">Email</p>
+                        <p className="font-medium">{result.privateData.email}</p>
+                      </div>
+                    )}
+                    
+                    {/* Academic Details */}
+                    {result.privateData.cwa !== null && result.privateData.cwa > 0 && (
                       <div>
                         <p className="text-gray-500">CWA</p>
                         <p className="font-medium text-lg">{result.privateData.cwa.toFixed(2)} / 100</p>
@@ -506,10 +401,10 @@ export default function Verifier() {
               )}
 
               {/* IPFS Reference */}
-              {result.record.parsedMetadata?.cid && (
+              {result.record.parsedMetadata?.ipfsCid && (
                 <div className="mt-4 pt-4 border-t">
                   <p className="text-gray-500 text-xs">IPFS CID</p>
-                  <p className="font-mono text-xs break-all">{result.record.parsedMetadata.cid}</p>
+                  <p className="font-mono text-xs break-all">{result.record.parsedMetadata.ipfsCid}</p>
                 </div>
               )}
             </>

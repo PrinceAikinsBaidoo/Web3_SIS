@@ -64,9 +64,9 @@ contract RecordRegistry {
         
         // Check via InstitutionRegistry if configured
         if (institutionRegistryAddress != address(0)) {
-            // Delegate to InstitutionRegistry to check if wallet is authorized
+            // Use the helper function to check if wallet is authorized for ANY institution
             (bool success, bytes memory result) = institutionRegistryAddress.staticcall(
-                abi.encodeWithSignature("isWalletAuthorized(address,address)", _address, _address)
+                abi.encodeWithSignature("isWalletAuthorizedForAny(address)", _address)
             );
             if (success && result.length > 0) {
                 return abi.decode(result, (bool));

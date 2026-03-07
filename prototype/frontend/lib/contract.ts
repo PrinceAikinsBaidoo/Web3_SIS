@@ -75,6 +75,7 @@ const INSTITUTION_REGISTRY_ABI = [
   "function addAuthorizedWallet(address _wallet) external",
   "function removeAuthorizedWallet(address _wallet) external",
   "function isWalletAuthorized(address _institution, address _wallet) view returns (bool)",
+  "function isWalletAuthorizedForAny(address _wallet) view returns (bool)",
   "function getInstitutionInfo(address _address) view returns (string memory name, string memory domain, bool isAccredited, uint256 authorizedWalletCount)",
   "function getAuthorizedWallets(address _address) view returns (address[])",
   "function getInstitutionByDomain(string calldata _domain) view returns (address)",
@@ -95,10 +96,10 @@ const INSTITUTION_REGISTRY_ABI = [
 
 // Contract addresses from environment (with fallback defaults)
 const CONTRACT_ADDRESSES = {
-  recordRegistry: process.env.NEXT_PUBLIC_RECORD_REGISTRY || '0x9fE46736679d2D9a65F0992F2272dE9f3c7fa6e0',
-  studentIdentity: process.env.NEXT_PUBLIC_STUDENT_IDENTITY || '0xCf7Ed3AccA5a467e9e704C703E8D87F634fB0Fc9',
-  verificationLog: process.env.NEXT_PUBLIC_VERIFICATION_LOG || '0xDc64a140Aa3E981100a9becA4E685f962f0cF6C9',
-  institutionRegistry: process.env.NEXT_PUBLIC_INSTITUTION_REGISTRY || '0xe7f1725E7734CE288F8367e1Bb143E90bb3F0512'
+  recordRegistry: process.env.NEXT_PUBLIC_RECORD_REGISTRY || '0x5FC8d32690cc91D4c39d9d3abcBD16989F875707',
+  studentIdentity: process.env.NEXT_PUBLIC_STUDENT_IDENTITY || '0x0165878A594ca255338adfa4d48449f69242Eb8F',
+  verificationLog: process.env.NEXT_PUBLIC_VERIFICATION_LOG || '0xa513E6E4b8f2a923D98304ec87F64353C4D5C853',
+  institutionRegistry: process.env.NEXT_PUBLIC_INSTITUTION_REGISTRY || '0xDc64a140Aa3E981100a9becA4E685f962f0cF6C9'
 }
 
 const DEFAULT_RPC_URL = process.env.NEXT_PUBLIC_RPC_URL || 'http://127.0.0.1:8545'
@@ -238,13 +239,37 @@ class ContractService {
 
   // Check if address is authorized issuer (uses new isAuthorized function)
   async isAuthorizedIssuer(address: string): Promise<boolean> {
-    const contract = this.getRecordRegistry()
+    // First, check direct authorization in RecordRegistry
+    const recordRegistry = this.getRecordRegistry()
     try {
-      return await contract.isAuthorized(address)
+      const directAuth = await recordRegistry.isAuthorized(address)
+      if (directAuth) return true
     } catch {
-      // Fallback to old method if new function doesn't exist
-      return await contract.authorizedIssuers(address)
+      // Fallback to old method
+      try {
+        const directAuth = await recordRegistry.authorizedIssuers(address)
+        if (directAuth) return true
+      } catch {
+        // Continue to check via institution
+      }
     }
+    
+    // Check if the wallet is authorized through an institution
+    // Loop through all institutions and check if this wallet is authorized for any
+    const institutionRegistry = this.getInstitutionRegistry()
+    try {
+      const count = await institutionRegistry.getInstitutionCount()
+      
+      for (let i = 0; i < count; i++) {
+        const institutionAddress = await institutionRegistry.registeredInstitutions(i)
+        const isAuth = await institutionRegistry.isWalletAuthorized(institutionAddress, address)
+        if (isAuth) return true
+      }
+    } catch {
+      console.error('Error checking institution authorization')
+    }
+    
+    return false
   }
 
   // Set InstitutionRegistry address (owner only)

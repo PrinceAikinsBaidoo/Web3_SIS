@@ -25,8 +25,14 @@ export default function Home() {
         </p>
         <div className="flex items-center justify-center gap-4">
           <Link 
-            href="/issuer" 
+            href="/institution" 
             className="px-6 py-3 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors font-medium"
+          >
+            Register Your University
+          </Link>
+          <Link 
+            href="/issuer" 
+            className="px-6 py-3 bg-white text-primary-600 border border-primary-600 rounded-lg hover:bg-primary-50 transition-colors font-medium"
           >
             Issue Records
           </Link>
@@ -112,7 +118,7 @@ export default function Home() {
           <div>
             <p className="text-gray-400 text-sm mb-1">RecordRegistry Address</p>
             <code className="bg-gray-800 px-3 py-2 rounded block text-sm break-all">
-              0x0165878A594ca255338adfa4d48449f69242Eb8F
+              0xe7f1725E7734CE288F8367e1Bb143E90bb3F0512
             </code>
           </div>
           <div>
@@ -120,6 +126,27 @@ export default function Home() {
             <code className="bg-gray-800 px-3 py-2 rounded block text-sm">
               Localhost (Hardhat)
             </code>
+          </div>
+        </div>
+        <div className="mt-4 pt-4 border-t border-gray-700">
+          <p className="text-gray-400 text-sm mb-1">All Deployed Contract Addresses</p>
+          <div className="grid md:grid-cols-2 gap-4 text-xs font-mono">
+            <div>
+              <span className="text-gray-500">InstitutionRegistry:</span>
+              <span className="ml-2 text-green-400">0x5FbDB2315678afecb367f032d93F642f64180aa3</span>
+            </div>
+            <div>
+              <span className="text-gray-500">RecordRegistry:</span>
+              <span className="ml-2 text-green-400">0xe7f1725E7734CE288F8367e1Bb143E90bb3F0512</span>
+            </div>
+            <div>
+              <span className="text-gray-500">StudentIdentity:</span>
+              <span className="ml-2 text-green-400">0x9fE46736679d2D9a65F0992F2272dE9f3c7fa6e0</span>
+            </div>
+            <div>
+              <span className="text-gray-500">VerificationLog:</span>
+              <span className="ml-2 text-green-400">0xCf7Ed3AccA5a467e9e704C703E8D87F634fB0Fc9</span>
+            </div>
           </div>
         </div>
       </div>
