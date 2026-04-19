@@ -37,9 +37,17 @@ async function main() {
   await verificationLog.deployed();
   console.log("   VerificationLog deployed to:", verificationLog.address);
 
-  // Authorize deployer as issuer in RecordRegistry
+  // Deployer is already authorized in RecordRegistry (constructor).
   const isAuthorized = await recordRegistry.authorizedIssuers(deployer.address);
   console.log("\n   Deployer authorized as issuer:", isAuthorized);
+
+  // Required: link registries so RecordRegistry._isAuthorized() can use
+  // InstitutionRegistry.isWalletAuthorizedForAny (institution owners / authorized wallets).
+  console.log("\n5. Linking RecordRegistry → InstitutionRegistry...");
+  const linkTx = await recordRegistry.setInstitutionRegistry(institutionRegistry.address);
+  await linkTx.wait();
+  const linked = await recordRegistry.institutionRegistryAddress();
+  console.log("   Linked at:", linked);
 
   console.log("\n" + "=".repeat(60));
   console.log("DEPLOYMENT SUMMARY");

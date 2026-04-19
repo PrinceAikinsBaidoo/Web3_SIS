@@ -25,9 +25,6 @@ const STORAGE_KEY = 'wallet_address'
 // Hardhat chain ID (31337) - adjust for other networks
 const SUPPORTED_CHAIN_IDS = [31337, 11155111, 1] // Hardhat, Sepolia, Mainnet
 
-// Default RPC URL for read operations (must match Hardhat node port)
-const DEFAULT_RPC_URL = 'http://127.0.0.1:8545'
-
 export function WalletProvider({ children }: { children: ReactNode }) {
   const [wallet, setWallet] = useState<WalletState>({
     address: '',
@@ -67,6 +64,8 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       }
 
       try {
+        await contractService.ensureDeployAddressesLoaded()
+
         const storedAddress = localStorage.getItem(STORAGE_KEY)
         
         // Create provider and check for existing accounts
@@ -74,33 +73,23 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         const currentAccounts = await provider.listAccounts()
         
         if (currentAccounts.length > 0) {
-          // MetaMask is connected - validate and restore session
           const isValidNetwork = await validateNetwork(provider)
-          
-          if (isValidNetwork && storedAddress && 
-              currentAccounts[0].toLowerCase() === storedAddress.toLowerCase()) {
-            // Restore session
+          const addr = currentAccounts[0]
+
+          if (isValidNetwork) {
+            // Always mirror MetaMask’s active account (avoids empty UI when localStorage disagreed)
             const signer = provider.getSigner()
+            const network = await provider.getNetwork()
+            contractService.bindReadSigner(signer)
             setSigner(signer)
             setWallet({
-              address: currentAccounts[0],
+              address: addr,
               isConnected: true,
               isConnecting: false,
-              chainId: Number((await provider.getNetwork()).chainId)
+              chainId: Number(network.chainId)
             })
-          } else if (!storedAddress) {
-            // No stored address but MetaMask connected - use current account
-            const signer = provider.getSigner()
-            setSigner(signer)
-            setWallet({
-              address: currentAccounts[0],
-              isConnected: true,
-              isConnecting: false,
-              chainId: Number((await provider.getNetwork()).chainId)
-            })
-            localStorage.setItem(STORAGE_KEY, currentAccounts[0])
-          } else {
-            // Address mismatch - clear storage
+            localStorage.setItem(STORAGE_KEY, addr)
+          } else if (storedAddress) {
             localStorage.removeItem(STORAGE_KEY)
           }
         }
@@ -114,6 +103,14 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     initWallet()
   }, [])
 
+  // Keep contract read path on the same provider as the wallet (avoids split-brain vs static RPC)
+  useEffect(() => {
+    contractService.bindReadSigner(signer)
+    return () => {
+      contractService.bindReadSigner(null)
+    }
+  }, [signer])
+
   // Listen for account and network changes
   useEffect(() => {
     if (typeof window === 'undefined' || !window.ethereum || !isInitialized) return
@@ -122,13 +119,14 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       if (accounts.length === 0) {
         // User disconnected from MetaMask
         disconnectWallet()
-      } else if (accounts[0].toLowerCase() !== wallet.address.toLowerCase()) {
+      } else if (accounts[0].toLowerCase() !== (wallet.address || '').toLowerCase()) {
         // Account changed - update state and localStorage
         localStorage.setItem(STORAGE_KEY, accounts[0])
         
         // Re-create signer for new account
         const provider = new ethers.providers.Web3Provider(window.ethereum as any)
         const newSigner = provider.getSigner()
+        contractService.bindReadSigner(newSigner)
         setSigner(newSigner)
         
         setWallet(prev => ({
@@ -164,6 +162,8 @@ export function WalletProvider({ children }: { children: ReactNode }) {
 
       // Request account access
       await window.ethereum.request({ method: 'eth_requestAccounts' })
+
+      await contractService.ensureDeployAddressesLoaded()
       
       const provider = new ethers.providers.Web3Provider(window.ethereum as any)
       
@@ -181,6 +181,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       // Save to localStorage
       localStorage.setItem(STORAGE_KEY, address)
 
+      contractService.bindReadSigner(signer)
       setSigner(signer)
       setWallet({
         address,
@@ -200,6 +201,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
 
   const disconnectWallet = () => {
     localStorage.removeItem(STORAGE_KEY)
+    contractService.bindReadSigner(null)
     setSigner(null)
     setWallet({
       address: '',

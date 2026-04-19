@@ -3,6 +3,7 @@
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { useWallet } from '../context/WalletContext'
+import { formatShortAddress } from '@/lib/formatAddress'
 
 export default function Navbar() {
   const pathname = usePathname()
@@ -62,11 +63,16 @@ export default function Navbar() {
                 {wallet.isConnecting ? 'Connecting...' : 'Connect Wallet'}
               </button>
             ) : (
-              <div className="flex items-center space-x-3">
-                <div className="flex items-center space-x-2">
-                  <div className="w-2 h-2 bg-green-500 rounded-full"></div>
-                  <span className="text-sm text-gray-600 font-mono">
-                    {wallet.address.slice(0, 6)}...{wallet.address.slice(-4)}
+              <div className="flex items-center space-x-3 shrink-0">
+                <div className="flex items-center space-x-2 min-w-0">
+                  <div className="w-2 h-2 bg-green-500 rounded-full shrink-0" aria-hidden />
+                  <span
+                    className="text-sm text-gray-700 font-mono tabular-nums truncate max-w-[min(100vw-8rem,14rem)] sm:max-w-none"
+                    title={wallet.address || undefined}
+                  >
+                    {wallet.address
+                      ? formatShortAddress(wallet.address)
+                      : 'Connected'}
                   </span>
                 </div>
                 <button

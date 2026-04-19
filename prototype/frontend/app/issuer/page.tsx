@@ -110,7 +110,17 @@ export default function IssuerDashboard() {
       if (authorized) {
         // Try to get institution info
         try {
-          const instInfo = await contractService.getInstitutionByWallet(wallet.address)
+          // First, try to find institution by authorized wallet
+          let instInfo = await contractService.getInstitutionByWallet(wallet.address)
+          
+          // If not found, check if this wallet IS the institution owner
+          if (!instInfo) {
+            const isOwnerRegistered = await contractService.isInstitutionRegistered(wallet.address)
+            if (isOwnerRegistered) {
+              instInfo = await contractService.getInstitutionDetails(wallet.address)
+            }
+          }
+          
           if (instInfo) {
             setInstitutionName(instInfo.name)
             setInstitutionDomain(instInfo.domain)

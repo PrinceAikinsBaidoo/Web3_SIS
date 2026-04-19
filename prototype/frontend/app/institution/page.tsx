@@ -48,23 +48,65 @@ export default function InstitutionPage() {
     
     try {
       setIsLoading(true)
+
+      await contractService.ensureDeployAddressesLoaded()
+
+      const registryAddr = contractService.getContractAddresses().institutionRegistry
+      const probe = await contractService.probeInstitutionRegistry()
+
+      if (!probe.walletSeesBytecode && probe.httpSeesBytecode) {
+        setIsRegistered(false)
+        setInstitutionInfo(null)
+        setStatus({
+          type: 'error',
+          message: `Contracts exist on Hardhat at ${registryAddr.slice(0, 10)}…${registryAddr.slice(-6)} (${probe.rpcUrlUsed}), but MetaMask did not return bytecode there. Open MetaMask → Networks → your Localhost network → set RPC URL exactly to ${probe.rpcUrlUsed} and chain ID 31337 (must match Hardhat). Then refresh.`,
+        })
+        return
+      }
+
+      if (!probe.walletSeesBytecode && !probe.httpSeesBytecode) {
+        setIsRegistered(false)
+        setInstitutionInfo(null)
+        const chainHint =
+          probe.walletChainId != null && probe.walletChainId !== 31337
+            ? ` Your wallet reports chain ID ${probe.walletChainId} (Hardhat local is 31337).`
+            : ''
+        setStatus({
+          type: 'error',
+          message: `No InstitutionRegistry bytecode at ${registryAddr.slice(0, 10)}…${registryAddr.slice(-6)} on ${probe.rpcUrlUsed}.${chainHint} Leave npm run node running, then in another terminal from prototype run npm run deploy (this deploys to that live node). Then refresh.`,
+        })
+        return
+      }
       
       // Check if this wallet IS the institution (registered directly)
       const registered = await contractService.isInstitutionRegistered(wallet.address)
       setIsRegistered(registered)
       
-      if (registered) {
-        // Get accreditation status
+      if (!registered) {
+        setInstitutionInfo(null)
+        return
+      }
+
+      // Do not let detail-fetch errors wipe "registered" — only the isRegistered call defines that
+      try {
         const accredited = await contractService.isInstitutionAccredited(wallet.address)
         setIsAccredited(accredited)
-        
-        // Get institution info
         const info = await contractService.getInstitutionDetails(wallet.address)
         setInstitutionInfo(info)
+      } catch (detailErr: any) {
+        console.error('Error loading institution details:', detailErr)
+        setInstitutionInfo(null)
       }
     } catch (error: any) {
       console.error('Error checking registration:', error)
       setIsRegistered(false)
+      setInstitutionInfo(null)
+      const registryAddr = contractService.getContractAddresses().institutionRegistry
+      const hint =
+        error?.code === 'CALL_EXCEPTION'
+          ? `Registry call failed at ${registryAddr.slice(0, 10)}…${registryAddr.slice(-6)}. Deploy contracts (cd prototype → npm run deploy), MetaMask → Localhost 8545 (chain 31337), then refresh.`
+          : error?.message || 'Could not check registration.'
+      setStatus({ type: 'error', message: hint })
     } finally {
       setIsLoading(false)
     }
@@ -86,6 +128,8 @@ export default function InstitutionPage() {
     try {
       setIsLoading(true)
       setStatus(null)
+
+      await contractService.ensureDeployAddressesLoaded()
 
       const signer = walletSigner || new ethers.providers.Web3Provider(window.ethereum!).getSigner()
 

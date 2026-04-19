@@ -94,12 +94,74 @@ const INSTITUTION_REGISTRY_ABI = [
   "event InstitutionReactivated(address indexed institutionAddress, uint256 timestamp)"
 ]
 
-// Contract addresses from environment (with fallback defaults)
-const CONTRACT_ADDRESSES = {
-  recordRegistry: process.env.NEXT_PUBLIC_RECORD_REGISTRY || '0x5FC8d32690cc91D4c39d9d3abcBD16989F875707',
-  studentIdentity: process.env.NEXT_PUBLIC_STUDENT_IDENTITY || '0x0165878A594ca255338adfa4d48449f69242Eb8F',
-  verificationLog: process.env.NEXT_PUBLIC_VERIFICATION_LOG || '0xa513E6E4b8f2a923D98304ec87F64353C4D5C853',
-  institutionRegistry: process.env.NEXT_PUBLIC_INSTITUTION_REGISTRY || '0xDc64a140Aa3E981100a9becA4E685f962f0cF6C9'
+// Support both NEXT_PUBLIC_* and NEXT_PUBLIC_*_ADDRESS (matches .env.example / common Next patterns)
+const envContract = (shortKey: string, longKey: string, fallback: string): string =>
+  process.env[shortKey] || process.env[longKey] || fallback
+
+export type ContractAddressMap = {
+  recordRegistry: string
+  studentIdentity: string
+  verificationLog: string
+  institutionRegistry: string
+}
+
+function buildInitialContractAddresses(): ContractAddressMap {
+  return {
+    recordRegistry: envContract(
+      'NEXT_PUBLIC_RECORD_REGISTRY',
+      'NEXT_PUBLIC_RECORD_REGISTRY_ADDRESS',
+      '0xe7f1725E7734CE288F8367e1Bb143E90bb3F0512'
+    ),
+    studentIdentity: envContract(
+      'NEXT_PUBLIC_STUDENT_IDENTITY',
+      'NEXT_PUBLIC_STUDENT_IDENTITY_ADDRESS',
+      '0x9fE46736679d2D9a65F0992F2272dE9f3c7fa6e0'
+    ),
+    verificationLog: envContract(
+      'NEXT_PUBLIC_VERIFICATION_LOG',
+      'NEXT_PUBLIC_VERIFICATION_LOG_ADDRESS',
+      '0xCf7Ed3AccA5a467e9e704C703E8D87F634fB0Fc9'
+    ),
+    institutionRegistry: envContract(
+      'NEXT_PUBLIC_INSTITUTION_REGISTRY',
+      'NEXT_PUBLIC_INSTITUTION_REGISTRY_ADDRESS',
+      '0x5FbDB2315678afecb367f032d93F642f64180aa3'
+    )
+  }
+}
+
+/** Live addresses (env defaults, then overwritten from /api/contract-addresses after deploy). */
+let contractAddresses: ContractAddressMap = buildInitialContractAddresses()
+
+let hydrateAddressesPromise: Promise<void> | null = null
+
+/** Merge `prototype/contract-addresses.json` via Next API (client-only). Safe to call many times. */
+async function hydrateContractAddressesFromApi(): Promise<void> {
+  if (typeof window === 'undefined') return
+  if (!hydrateAddressesPromise) {
+    hydrateAddressesPromise = (async () => {
+      try {
+        const res = await fetch('/api/contract-addresses', { cache: 'no-store' })
+        if (!res.ok) return
+        const j = (await res.json()) as { [key: string]: unknown }
+        const keys: (keyof ContractAddressMap)[] = [
+          'recordRegistry',
+          'studentIdentity',
+          'verificationLog',
+          'institutionRegistry'
+        ]
+        for (const k of keys) {
+          const v = j[k]
+          if (typeof v === 'string' && ethers.utils.isAddress(v)) {
+            contractAddresses[k] = ethers.utils.getAddress(v)
+          }
+        }
+      } catch {
+        /* keep env / defaults */
+      }
+    })()
+  }
+  await hydrateAddressesPromise
 }
 
 const DEFAULT_RPC_URL = process.env.NEXT_PUBLIC_RPC_URL || 'http://127.0.0.1:8545'
@@ -157,66 +219,88 @@ export interface InstitutionDetails extends Institution {
 
 class ContractService {
   private rpcUrl: string
+  /** When set, all read-only calls use this signer's provider (same RPC as txs). */
+  private readContextSigner: ethers.Signer | null = null
 
   constructor() {
     this.rpcUrl = DEFAULT_RPC_URL
   }
 
-  // Get provider (read-only)
-  getProvider(): ethers.providers.JsonRpcProvider {
+  bindReadSigner(signer: ethers.Signer | null) {
+    this.readContextSigner = signer
+  }
+
+  /** Load addresses from `prototype/contract-addresses.json` (via API). Call after deploy or on app load. */
+  async ensureDeployAddressesLoaded(): Promise<void> {
+    await hydrateContractAddressesFromApi()
+  }
+
+  /**
+   * Read-only provider for view calls.
+   * Prefer the connected wallet's provider so reads match MetaMask's chain/RPC.
+   * Otherwise use injected `window.ethereum`, then JSON-RPC for SSR/tests.
+   */
+  getProvider(): ethers.providers.Provider {
+    const fromSigner = this.readContextSigner?.provider
+    if (fromSigner) {
+      return fromSigner
+    }
+    if (typeof window !== 'undefined' && window.ethereum) {
+      return new ethers.providers.Web3Provider(window.ethereum as ethers.providers.ExternalProvider)
+    }
     return new ethers.providers.JsonRpcProvider(this.rpcUrl)
   }
 
   // ==================== RECORD REGISTRY ====================
 
   // Get RecordRegistry contract instance (read-only)
-  getRecordRegistry(provider?: ethers.providers.JsonRpcProvider): ethers.Contract {
+  getRecordRegistry(provider?: ethers.providers.Provider): ethers.Contract {
     const prov = provider || this.getProvider()
-    return new ethers.Contract(CONTRACT_ADDRESSES.recordRegistry, RECORD_REGISTRY_ABI, prov)
+    return new ethers.Contract(contractAddresses.recordRegistry, RECORD_REGISTRY_ABI, prov)
   }
 
   // Get RecordRegistry with signer (for write operations)
   getRecordRegistryWithSigner(signer: ethers.Signer): ethers.Contract {
-    return new ethers.Contract(CONTRACT_ADDRESSES.recordRegistry, RECORD_REGISTRY_ABI, signer)
+    return new ethers.Contract(contractAddresses.recordRegistry, RECORD_REGISTRY_ABI, signer)
   }
 
   // ==================== STUDENT IDENTITY ====================
 
   // Get StudentIdentity contract instance (read-only)
-  getStudentIdentity(provider?: ethers.providers.JsonRpcProvider): ethers.Contract {
+  getStudentIdentity(provider?: ethers.providers.Provider): ethers.Contract {
     const prov = provider || this.getProvider()
-    return new ethers.Contract(CONTRACT_ADDRESSES.studentIdentity, STUDENT_IDENTITY_ABI, prov)
+    return new ethers.Contract(contractAddresses.studentIdentity, STUDENT_IDENTITY_ABI, prov)
   }
 
   // Get StudentIdentity with signer
   getStudentIdentityWithSigner(signer: ethers.Signer): ethers.Contract {
-    return new ethers.Contract(CONTRACT_ADDRESSES.studentIdentity, STUDENT_IDENTITY_ABI, signer)
+    return new ethers.Contract(contractAddresses.studentIdentity, STUDENT_IDENTITY_ABI, signer)
   }
 
   // ==================== VERIFICATION LOG ====================
 
   // Get VerificationLog contract instance (read-only)
-  getVerificationLog(provider?: ethers.providers.JsonRpcProvider): ethers.Contract {
+  getVerificationLog(provider?: ethers.providers.Provider): ethers.Contract {
     const prov = provider || this.getProvider()
-    return new ethers.Contract(CONTRACT_ADDRESSES.verificationLog, VERIFICATION_LOG_ABI, prov)
+    return new ethers.Contract(contractAddresses.verificationLog, VERIFICATION_LOG_ABI, prov)
   }
 
   // Get VerificationLog with signer
   getVerificationLogWithSigner(signer: ethers.Signer): ethers.Contract {
-    return new ethers.Contract(CONTRACT_ADDRESSES.verificationLog, VERIFICATION_LOG_ABI, signer)
+    return new ethers.Contract(contractAddresses.verificationLog, VERIFICATION_LOG_ABI, signer)
   }
 
   // ==================== INSTITUTION REGISTRY ====================
 
   // Get InstitutionRegistry contract instance (read-only)
-  getInstitutionRegistry(provider?: ethers.providers.JsonRpcProvider): ethers.Contract {
+  getInstitutionRegistry(provider?: ethers.providers.Provider): ethers.Contract {
     const prov = provider || this.getProvider()
-    return new ethers.Contract(CONTRACT_ADDRESSES.institutionRegistry, INSTITUTION_REGISTRY_ABI, prov)
+    return new ethers.Contract(contractAddresses.institutionRegistry, INSTITUTION_REGISTRY_ABI, prov)
   }
 
   // Get InstitutionRegistry with signer
   getInstitutionRegistryWithSigner(signer: ethers.Signer): ethers.Contract {
-    return new ethers.Contract(CONTRACT_ADDRESSES.institutionRegistry, INSTITUTION_REGISTRY_ABI, signer)
+    return new ethers.Contract(contractAddresses.institutionRegistry, INSTITUTION_REGISTRY_ABI, signer)
   }
 
   // ==================== WALLET CONNECTION ====================
@@ -454,6 +538,67 @@ class ContractService {
 
   // ==================== INSTITUTION REGISTRY FUNCTIONS ====================
 
+  private hasBytecode(code: string): boolean {
+    return typeof code === 'string' && code.length > 2 && code !== '0x'
+  }
+
+  /** Registry bytecode visible to MetaMask / bound signer (what view calls use). */
+  async isInstitutionRegistryDeployed(): Promise<boolean> {
+    const p = await this.probeInstitutionRegistry()
+    return p.walletSeesBytecode
+  }
+
+  /**
+   * Compare bytecode via wallet RPC vs direct HTTP to `NEXT_PUBLIC_RPC_URL` (default 127.0.0.1:8545).
+   * Detects “Hardhat has contracts but MetaMask points elsewhere”.
+   */
+  async probeInstitutionRegistry(): Promise<{
+    address: string
+    rpcUrlUsed: string
+    walletSeesBytecode: boolean
+    httpSeesBytecode: boolean
+    walletChainId: number | null
+    httpChainId: number | null
+  }> {
+    const address = contractAddresses.institutionRegistry
+    let walletCode = '0x'
+    let httpCode = '0x'
+    let walletChainId: number | null = null
+    let httpChainId: number | null = null
+
+    try {
+      walletCode = await this.getProvider().getCode(address)
+    } catch {
+      walletCode = '0x'
+    }
+    try {
+      const p = this.getProvider()
+      const net = await p.getNetwork()
+      walletChainId = Number(net.chainId)
+    } catch {
+      walletChainId = null
+    }
+
+    try {
+      const httpProv = new ethers.providers.JsonRpcProvider(this.rpcUrl)
+      httpCode = await httpProv.getCode(address)
+      const net = await httpProv.getNetwork()
+      httpChainId = Number(net.chainId)
+    } catch {
+      httpCode = '0x'
+      httpChainId = null
+    }
+
+    return {
+      address,
+      rpcUrlUsed: this.rpcUrl,
+      walletSeesBytecode: this.hasBytecode(walletCode),
+      httpSeesBytecode: this.hasBytecode(httpCode),
+      walletChainId,
+      httpChainId
+    }
+  }
+
   // Register an institution
   async registerInstitution(
     signer: ethers.Signer,
@@ -532,12 +677,20 @@ class ContractService {
     const contract = this.getInstitutionRegistry()
     const count = await contract.getInstitutionCount()
     
+    // Normalize the wallet address for comparison (lowercase)
+    const normalizedWalletAddress = walletAddress.toLowerCase()
+    
     for (let i = 0; i < count; i++) {
       const institutionAddress = await contract.registeredInstitutions(i)
       const authorizedWallets = await contract.getAuthorizedWallets(institutionAddress)
       
       // Check if the wallet is authorized for this institution
-      if (authorizedWallets.includes(walletAddress)) {
+      // Use lowercase comparison to handle case differences in Ethereum addresses
+      const isAuthorized = authorizedWallets.some(
+        (w: string) => w.toLowerCase() === normalizedWalletAddress
+      )
+      
+      if (isAuthorized) {
         return this.getInstitutionDetails(institutionAddress)
       }
     }
@@ -577,8 +730,8 @@ class ContractService {
   }
 
   // Get contract addresses
-  getContractAddresses() {
-    return CONTRACT_ADDRESSES
+  getContractAddresses(): ContractAddressMap {
+    return { ...contractAddresses }
   }
 }
 

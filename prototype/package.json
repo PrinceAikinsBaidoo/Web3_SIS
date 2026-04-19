@@ -6,7 +6,7 @@
   "scripts": {
     "compile": "hardhat compile",
     "test": "hardhat test",
-    "deploy": "hardhat run scripts/deploy.js",
+    "deploy": "hardhat run scripts/deploy.js --network localhost",
     "demo": "node scripts/demo-workflow.js",
     "node": "hardhat node"
   },
