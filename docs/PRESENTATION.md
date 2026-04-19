@@ -1,11 +1,5 @@
 # Web3_SIS — Presentation Guide
 
-Use this document as a **speaker script** and **outline** for a thesis defense, demo, or stakeholder walkthrough. It starts in **plain language**, then moves into **technical depth** so you can match your audience.
-
-**Suggested total time:** 12–20 minutes live demo + 5–10 minutes questions (adjust section depth to fit).
-
----
-
 ## 1. Opening (non-technical, 2–3 minutes)
 
 ### Hook
