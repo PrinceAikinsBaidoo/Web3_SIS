@@ -247,6 +247,43 @@ export async function pinToIPFS(cid: string): Promise<boolean> {
   }
 }
 
+export type UnpinResult =
+  | { ok: true; skipped?: boolean; reason?: string; message?: string; status?: number }
+  | { ok: false; error: string }
+
+/**
+ * Ask the Next.js server to unpin a CID from Pinata (right-to-erasure: availability removal).
+ * Credentials must be configured server-side (see README / .env.example).
+ */
+export async function unpinFromPinataViaServer(cid: string): Promise<UnpinResult> {
+  const trimmed = cid?.trim()
+  if (!trimmed) {
+    return { ok: false, error: 'No CID provided' }
+  }
+
+  try {
+    const res = await fetch('/api/ipfs/unpin', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ cid: trimmed }),
+    })
+    let data: UnpinResult & { error?: string }
+    try {
+      data = (await res.json()) as UnpinResult & { error?: string }
+    } catch {
+      return { ok: false, error: `Unpin request failed (${res.status})` }
+    }
+
+    if (!res.ok && !(data && 'ok' in data && data.ok)) {
+      return { ok: false, error: data.error || `Unpin request failed (${res.status})` }
+    }
+
+    return data as UnpinResult
+  } catch (e: unknown) {
+    return { ok: false, error: e instanceof Error ? e.message : 'Unpin request failed' }
+  }
+}
+
 export default {
   uploadToIPFS,
   uploadRecordToIPFS,
@@ -256,5 +293,6 @@ export default {
   getFileFromIPFS,
   isIPFSAvailable,
   getIPFSGatewayUrl,
-  pinToIPFS
+  pinToIPFS,
+  unpinFromPinataViaServer,
 }

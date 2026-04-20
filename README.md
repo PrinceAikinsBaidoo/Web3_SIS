@@ -149,6 +149,31 @@ Useful for extra demo setup; fresh flows normally use the UI after deploy.
 2. **Institution** (`/institution`) — Register the institution (your connected wallet becomes the institution owner and is included in authorized wallets). Self-accredit when prompted for the demo.
 3. **Issuer** (`/issuer`) — Fill public and private fields, set a student secret, issue; copy the record hash when done.
 4. **Verifier** (`/verifier`) — Verify by hash; optional secret for private fields.
+5. **All Records** (`/records`) — Revoke credentials. Use **Revoke + unpin (erasure)** to remove the encrypted IPFS object from Pinata (availability removal), then revoke on-chain; use **Revoke on-chain only** if you only need to invalidate the credential without touching Pinata.
+
+---
+
+## Right to erasure (GDPR-oriented, realistic scope)
+
+Blockchain state is **append-only**: you cannot erase that a transaction occurred, but you can **invalidate** the credential (`revokeRecord`) and stop hosting off-chain data.
+
+This prototype supports **two steps**:
+
+1. **Availability removal** — `POST /api/ipfs/unpin` (Next.js **server route**) calls Pinata’s **unpin** API so your pinning service drops the CID. The **All Records** page exposes **Revoke + unpin (erasure)** (unpin first, then on-chain revoke).
+2. **On-chain invalidation** — Revocation marks the record **not valid** for verifiers.
+
+**Cryptographic erasure** (making ciphertext unreadable even if a copy exists) is **not** fully automated here: private payloads are encrypted with a **student secret**; operational policy should ensure secrets are rotated or destroyed when required. A future upgrade is **per-record DEKs** with dual-wrap (institution + student).
+
+### Pinata credentials for unpin
+
+Prefer **server-only** variables in `prototype/frontend/.env.local` (read by the API route, not bundled to the browser):
+
+- `PINATA_JWT`, or  
+- `PINATA_API_KEY` + `PINATA_SECRET_API_KEY`
+
+For local development only, the route also falls back to `NEXT_PUBLIC_PINATA_API_KEY` / `NEXT_PUBLIC_PINATA_SECRET_KEY` if those are set (upload still uses them today). For production, move all Pinata secrets to server-only names and keep uploads behind a server API as well.
+
+**Note:** Unpinning does not guarantee global deletion if someone else pinned the same CID; thesis language should say **availability removal** from your infrastructure.
 
 ---
 
@@ -161,6 +186,7 @@ Useful for extra demo setup; fresh flows normally use the UI after deploy.
 | Port `8545` in use | Stop the old `node` / Hardhat process or pick another port in Hardhat config (and match MetaMask). |
 | Institution name missing on issuer | Owner vs authorized-wallet resolution and case-normalized address checks (see `contract.ts` / issuer page). |
 | IPFS errors | Expected without Pinata; use keys for real uploads. |
+| Unpin skipped / no erasure | Configure `PINATA_JWT` or `PINATA_API_KEY` + `PINATA_SECRET_API_KEY` in `.env.local` and restart `npm run dev`. Demo CIDs are never pinned, so unpin is skipped. |
 
 ---
 
@@ -188,6 +214,7 @@ npm run start     # Run production build
 - Read path prefers the **connected wallet’s provider** (and explicit binding) to avoid split-brain RPC issues.
 - **Bytecode probe** (wallet RPC vs HTTP) to surface MetaMask RPC mismatches.
 - Institution registration checks and navbar **address formatting**; **`suppressHydrationWarning`** on `<body>` for extension-injected attributes.
+- **IPFS unpin API** and **Revoke + unpin** on `/records` for GDPR-style availability removal (with honest limits documented above).
 
 ---
 

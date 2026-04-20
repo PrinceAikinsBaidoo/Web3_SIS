@@ -83,6 +83,7 @@ The goal is not “crypto for its own sake.” The chain provides a **tamper-evi
 | 5 | Copy **record hash** from success UI | “This hash is what verifiers use as the handle to the anchored record.” |
 | 6 | **Verifier** → paste hash → verify | “Anyone can check integrity and issuer without the secret.” |
 | 7 | Optional: enter **secret** | “With the student’s agreement, the verifier can align private details off-chain.” |
+| 8 | Optional: **All Records** → **Revoke + unpin (erasure)** | “For a data-subject style request we unpin from Pinata then revoke on-chain; limits vs global deletion are honest.” |
 
 If something fails, fall back to: “In production we would add monitoring, testnet rehearsal, and formal accreditation workflows; here we focus on the integrity and confidentiality split.”
 
@@ -117,7 +118,7 @@ A: Yes. The chain attests to **issuance and integrity**, not to moral truth. It 
 A: Same class of problem as passwords today. Production systems need **recovery policies**, custodial options, or **DIDs**—listed as future work.
 
 **Q: GDPR / right to be forgotten vs immutability?**  
-A: The design keeps **personal data** largely off-chain; revocation and policy layers are part of future compliance work. Immutability applies mainly to **anchors and audit events**, not necessarily to raw PII in the clear.
+A: Personal data stays largely **off-chain**. The app supports **availability removal** (Pinata **unpin** via a server API) plus **on-chain revocation**; the chain still shows that a record existed but is **invalid**. Full “cryptographic erasure” still needs key/destruction policy (see README).
 
 **Q: Why not put everything on-chain?**  
 A: Cost, size, and **privacy**. Public chains are a poor place for full transcripts and national IDs.
@@ -135,7 +136,7 @@ A: Same family of ideas (anchor + verify); this prototype emphasizes **instituti
 - **Demo accreditation** is not a real accreditation authority.  
 - **Access control** on contracts is simplified for a student prototype.  
 - **No formal penetration test** or production key management.  
-- **IPFS pinning** depends on Pinata or similar operational choices.  
+- **IPFS pinning** depends on Pinata or similar operational choices; **unpin** removes your host’s copy, not every copy on the internet.  
 - **Evaluation metrics** (latency, gas, comparison to SQL registries) are roadmap items for the thesis evaluation chapter.
 
 ---
