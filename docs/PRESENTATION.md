@@ -83,7 +83,7 @@ The goal is not “crypto for its own sake.” The chain provides a **tamper-evi
 | 5 | Copy **record hash** from success UI | “This hash is what verifiers use as the handle to the anchored record.” |
 | 6 | **Verifier** → paste hash → verify | “Anyone can check integrity and issuer without the secret.” |
 | 7 | Optional: enter **secret** | “With the student’s agreement, the verifier can align private details off-chain.” |
-| 8 | Optional: **All Records** → **Revoke + unpin (erasure)** | “For a data-subject style request we unpin from Pinata then revoke on-chain; limits vs global deletion are honest.” |
+| 8 | Optional: **All Records** → **Delete record** | “We unpin from Pinata then invalidate on-chain; limits vs global deletion are honest.” |
 
 If something fails, fall back to: “In production we would add monitoring, testnet rehearsal, and formal accreditation workflows; here we focus on the integrity and confidentiality split.”
 

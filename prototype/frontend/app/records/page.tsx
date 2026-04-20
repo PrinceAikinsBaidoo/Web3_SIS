@@ -79,11 +79,11 @@ export default function Records() {
     return new providers.Web3Provider(window.ethereum!).getSigner()
   }
 
-  /** On-chain revocation only (IPFS blob may remain pinned until separately removed). */
-  const handleRevokeChainOnly = async (recordHash: string) => {
+  /** Invalidate on-chain only; IPFS copy may remain pinned. */
+  const handleInvalidateOnChainOnly = async (recordHash: string) => {
     if (
       !confirm(
-        'Revoke this record on the blockchain? The credential will show as invalid for verifiers. Encrypted data may still exist on IPFS if it was pinned — use “Revoke + unpin” for availability erasure when Pinata is configured.'
+        'Invalidate this record on the blockchain only? Verifiers will see it as invalid, but a pinned IPFS copy may still exist. Use “Delete record” to remove the encrypted file from Pinata first when credentials are configured.'
       )
     ) {
       return
@@ -104,16 +104,16 @@ export default function Records() {
   }
 
   /**
-   * GDPR-oriented step: remove Pinata pin (availability), then revoke on-chain (integrity).
-   * Cryptographic erasure of content still requires destroying keys (student secret); see README.
+   * Delete record: unpin from Pinata (availability), then revoke on-chain.
+   * Cryptographic erasure still depends on key policy (e.g. student secret); see README.
    */
-  const handleRevokeAndUnpin = async (record: RecordWithMetadata) => {
+  const handleDeleteRecord = async (record: RecordWithMetadata) => {
     const cid = extractIpfsCid(record)
     if (
       !confirm(
         cid
-          ? `Revoke on-chain and request removal of the IPFS pin for CID ${cid.slice(0, 12)}…? This supports “right to erasure” availability removal (Pinata). On-chain history remains (revoked).`
-          : 'No IPFS CID found in metadata — only on-chain revocation will be performed. Continue?'
+          ? `Delete this record? This will remove the encrypted payload from Pinata (CID ${cid.slice(0, 12)}…) where possible, then mark the credential invalid on-chain. The blockchain still shows that a transaction occurred.`
+          : 'No IPFS CID was found in metadata — only on-chain invalidation will be performed. Continue?'
       )
     ) {
       return
@@ -131,7 +131,7 @@ export default function Records() {
           return
         }
         if (unpin.skipped && unpin.message) {
-          console.info('[erasure]', unpin.reason, unpin.message)
+          console.info('[delete-record]', unpin.reason, unpin.message)
         }
       }
 
@@ -154,9 +154,9 @@ export default function Records() {
           View and manage academic records issued by your institution.
         </p>
         <p className="text-sm text-gray-500 mt-2 max-w-3xl">
-          <span className="font-semibold text-gray-700">Erasure:</span>{' '}
-          use Revoke + unpin to remove the encrypted payload from Pinata (availability removal), then revoke on-chain.
-          Demo CIDs or missing server Pinata keys skip unpin; cryptographic erasure still depends on destroying decryption material (for example student secret policy).
+          <span className="font-semibold text-gray-700">Delete record:</span>{' '}
+          removes the encrypted payload from Pinata when configured, then invalidates the credential on-chain.
+          Demo CIDs or missing Pinata server keys skip the unpin step; full cryptographic erasure still depends on key policy (for example the student secret).
         </p>
       </div>
 
@@ -283,23 +283,23 @@ export default function Records() {
                       <div className="ml-4 flex flex-col gap-2 items-end">
                         <button
                           type="button"
-                          onClick={() => handleRevokeAndUnpin(record)}
+                          onClick={() => handleDeleteRecord(record)}
                           disabled={isLoading}
                           className="px-3 py-2 text-white bg-red-600 hover:bg-red-700 rounded-lg transition-colors text-sm disabled:opacity-50 flex items-center gap-1"
                         >
                           {isLoading ? (
                             <DelayedLoading isLoading={isLoading} size="sm" color="white" />
                           ) : (
-                            'Revoke + unpin (erasure)'
+                            'Delete record'
                           )}
                         </button>
                         <button
                           type="button"
-                          onClick={() => handleRevokeChainOnly(record.recordHash)}
+                          onClick={() => handleInvalidateOnChainOnly(record.recordHash)}
                           disabled={isLoading}
                           className="px-3 py-2 text-red-700 hover:bg-red-50 rounded-lg transition-colors text-xs disabled:opacity-50 border border-red-200"
                         >
-                          Revoke on-chain only
+                          Invalidate on-chain only
                         </button>
                       </div>
                     )}

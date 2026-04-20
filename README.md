@@ -149,7 +149,7 @@ Useful for extra demo setup; fresh flows normally use the UI after deploy.
 2. **Institution** (`/institution`) — Register the institution (your connected wallet becomes the institution owner and is included in authorized wallets). Self-accredit when prompted for the demo.
 3. **Issuer** (`/issuer`) — Fill public and private fields, set a student secret, issue; copy the record hash when done.
 4. **Verifier** (`/verifier`) — Verify by hash; optional secret for private fields.
-5. **All Records** (`/records`) — Revoke credentials. Use **Revoke + unpin (erasure)** to remove the encrypted IPFS object from Pinata (availability removal), then revoke on-chain; use **Revoke on-chain only** if you only need to invalidate the credential without touching Pinata.
+5. **All Records** (`/records`) — **Delete record** removes the encrypted object from Pinata (when configured), then invalidates the credential on-chain; **Invalidate on-chain only** skips Pinata and only marks the record invalid for verifiers.
 
 ---
 
@@ -159,7 +159,7 @@ Blockchain state is **append-only**: you cannot erase that a transaction occurre
 
 This prototype supports **two steps**:
 
-1. **Availability removal** — `POST /api/ipfs/unpin` (Next.js **server route**) calls Pinata’s **unpin** API so your pinning service drops the CID. The **All Records** page exposes **Revoke + unpin (erasure)** (unpin first, then on-chain revoke).
+1. **Availability removal** — `POST /api/ipfs/unpin` (Next.js **server route**) calls Pinata’s **unpin** API so your pinning service drops the CID. The **All Records** page **Delete record** action runs unpin first, then on-chain invalidation.
 2. **On-chain invalidation** — Revocation marks the record **not valid** for verifiers.
 
 **Cryptographic erasure** (making ciphertext unreadable even if a copy exists) is **not** fully automated here: private payloads are encrypted with a **student secret**; operational policy should ensure secrets are rotated or destroyed when required. A future upgrade is **per-record DEKs** with dual-wrap (institution + student).
@@ -214,7 +214,7 @@ npm run start     # Run production build
 - Read path prefers the **connected wallet’s provider** (and explicit binding) to avoid split-brain RPC issues.
 - **Bytecode probe** (wallet RPC vs HTTP) to surface MetaMask RPC mismatches.
 - Institution registration checks and navbar **address formatting**; **`suppressHydrationWarning`** on `<body>` for extension-injected attributes.
-- **IPFS unpin API** and **Revoke + unpin** on `/records` for GDPR-style availability removal (with honest limits documented above).
+- **IPFS unpin API** and **Delete record** on `/records` for GDPR-style availability removal (with honest limits documented above).
 
 ---
 
