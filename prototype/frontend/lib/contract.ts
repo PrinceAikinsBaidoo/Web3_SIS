@@ -133,7 +133,19 @@ function buildInitialContractAddresses(): ContractAddressMap {
 /** Live addresses (env defaults, then overwritten from /api/contract-addresses after deploy). */
 let contractAddresses: ContractAddressMap = buildInitialContractAddresses()
 
+/** Chain ID from `network` field in contract-addresses.json (null = unknown / skip strict check). */
+let expectedDeployChainId: number | null = null
+
 let hydrateAddressesPromise: Promise<void> | null = null
+
+function networkFieldToChainId(network: unknown): number | null {
+  if (typeof network !== 'string') return null
+  const n = network.toLowerCase().trim()
+  if (n === 'localhost' || n === 'hardhat' || n === '31337') return 31337
+  if (n === 'sepolia' || n === '11155111') return 11155111
+  if (n === 'mainnet' || n === 'ethereum' || n === '1') return 1
+  return null
+}
 
 /** Merge `prototype/contract-addresses.json` via Next API (client-only). Safe to call many times. */
 async function hydrateContractAddressesFromApi(): Promise<void> {
@@ -156,6 +168,7 @@ async function hydrateContractAddressesFromApi(): Promise<void> {
             contractAddresses[k] = ethers.utils.getAddress(v)
           }
         }
+        expectedDeployChainId = networkFieldToChainId(j.network)
       } catch {
         /* keep env / defaults */
       }
@@ -412,8 +425,34 @@ class ContractService {
     }
   }
 
+  /**
+   * Avoid opaque CALL_EXCEPTION (empty data) when the registry address has no code
+   * (restarted Hardhat, stale JSON) or the wallet RPC chain disagrees with deploy file.
+   */
+  private async assertRecordRegistryReadable(): Promise<void> {
+    await hydrateContractAddressesFromApi()
+    const provider = this.getProvider()
+    const net = await provider.getNetwork()
+    const chainId = Number(net.chainId)
+    if (expectedDeployChainId !== null && chainId !== expectedDeployChainId) {
+      throw new Error(
+        `Chain mismatch: your wallet is on chain ${chainId}, but contract-addresses.json targets chain ${expectedDeployChainId}. ` +
+          `Switch MetaMask to the matching network (e.g. Hardhat 31337 for local deploys), or deploy and update addresses for the chain you use.`
+      )
+    }
+    const addr = contractAddresses.recordRegistry
+    const code = await provider.getCode(addr)
+    if (!code || code === '0x') {
+      throw new Error(
+        `RecordRegistry has no bytecode at ${addr}. If you restarted the Hardhat node, run "cd prototype && npm run deploy" again, then refresh. ` +
+          `Also confirm MetaMask uses the same RPC (e.g. http://127.0.0.1:8545, chain 31337) as that deploy.`
+      )
+    }
+  }
+
   // Get all records for an issuer
   async getIssuerRecords(issuerAddress: string): Promise<RecordWithMetadata[]> {
+    await this.assertRecordRegistryReadable()
     const contract = this.getRecordRegistry()
     const recordHashes = await contract.getIssuerRecords(issuerAddress)
     
