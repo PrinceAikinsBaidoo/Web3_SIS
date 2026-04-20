@@ -8,6 +8,8 @@ import { ethers } from 'ethers'
 export default function InstitutionPage() {
   const { wallet, signer: walletSigner } = useWallet()
   const [isRegistered, setIsRegistered] = useState<boolean | null>(null)
+  /** True when InstitutionRegistry has no code on the wallet RPC (or MM/Hardhat URL mismatch). Not the same as “wallet never registered”. */
+  const [deployBlocked, setDeployBlocked] = useState(false)
   const [isAccredited, setIsAccredited] = useState<boolean>(false)
   const [isLoading, setIsLoading] = useState(false)
   const [status, setStatus] = useState<{ type: 'success' | 'error' | 'info'; message: string } | null>(null)
@@ -40,6 +42,7 @@ export default function InstitutionPage() {
     } else {
       setIsRegistered(null)
       setInstitutionInfo(null)
+      setDeployBlocked(false)
     }
   }, [wallet.isConnected, wallet.address])
 
@@ -57,6 +60,7 @@ export default function InstitutionPage() {
       if (!probe.walletSeesBytecode && probe.httpSeesBytecode) {
         setIsRegistered(false)
         setInstitutionInfo(null)
+        setDeployBlocked(true)
         setStatus({
           type: 'error',
           message: `Contracts exist on Hardhat at ${registryAddr.slice(0, 10)}…${registryAddr.slice(-6)} (${probe.rpcUrlUsed}), but MetaMask did not return bytecode there. Open MetaMask → Networks → your Localhost network → set RPC URL exactly to ${probe.rpcUrlUsed} and chain ID 31337 (must match Hardhat). Then refresh.`,
@@ -67,17 +71,20 @@ export default function InstitutionPage() {
       if (!probe.walletSeesBytecode && !probe.httpSeesBytecode) {
         setIsRegistered(false)
         setInstitutionInfo(null)
+        setDeployBlocked(true)
         const chainHint =
           probe.walletChainId != null && probe.walletChainId !== 31337
             ? ` Your wallet reports chain ID ${probe.walletChainId} (Hardhat local is 31337).`
             : ''
         setStatus({
           type: 'error',
-          message: `No InstitutionRegistry bytecode at ${registryAddr.slice(0, 10)}…${registryAddr.slice(-6)} on ${probe.rpcUrlUsed}.${chainHint} Leave npm run node running, then in another terminal from prototype run npm run deploy (this deploys to that live node). Then refresh.`,
+          message: `No InstitutionRegistry bytecode at ${registryAddr.slice(0, 10)}…${registryAddr.slice(-6)} on ${probe.rpcUrlUsed}.${chainHint} Restarting Hardhat clears chain state — old addresses in contract-addresses.json no longer work. Leave npm run node running, then in another terminal: cd prototype && npm run deploy. Hard refresh this page.`,
         })
         return
       }
-      
+
+      setDeployBlocked(false)
+
       // Check if this wallet IS the institution (registered directly)
       const registered = await contractService.isInstitutionRegistered(wallet.address)
       setIsRegistered(registered)
@@ -101,6 +108,7 @@ export default function InstitutionPage() {
       console.error('Error checking registration:', error)
       setIsRegistered(false)
       setInstitutionInfo(null)
+      setDeployBlocked(false)
       const registryAddr = contractService.getContractAddresses().institutionRegistry
       const hint =
         error?.code === 'CALL_EXCEPTION'
@@ -130,6 +138,16 @@ export default function InstitutionPage() {
       setStatus(null)
 
       await contractService.ensureDeployAddressesLoaded()
+
+      const probe = await contractService.probeInstitutionRegistry()
+      if (!probe.walletSeesBytecode) {
+        setStatus({
+          type: 'error',
+          message:
+            'InstitutionRegistry is not on this network yet (or MetaMask RPC does not match Hardhat). Deploy to the running node (cd prototype && npm run deploy), fix Localhost in MetaMask to http://127.0.0.1:8545 / chain 31337, then refresh.',
+        })
+        return
+      }
 
       const signer = walletSigner || new ethers.providers.Web3Provider(window.ethereum!).getSigner()
 
@@ -288,11 +306,38 @@ export default function InstitutionPage() {
               <p className="text-sm text-gray-500 mb-1">Connected Wallet</p>
               <p className="font-mono text-sm">{wallet.address.slice(0, 10)}...{wallet.address.slice(-8)}</p>
             </div>
-            <div className="px-4 py-2 rounded-full text-sm font-medium bg-yellow-100 text-yellow-700">
-              ✗ Not Registered
+            <div
+              className={`px-4 py-2 rounded-full text-sm font-medium ${
+                deployBlocked ? 'bg-amber-100 text-amber-800' : 'bg-yellow-100 text-yellow-700'
+              }`}
+            >
+              {deployBlocked ? 'Local contracts missing' : '✗ Not Registered'}
             </div>
           </div>
         </div>
+
+        {deployBlocked && (
+          <div className="mb-6 rounded-xl border border-amber-200 bg-amber-50 p-5 text-amber-950">
+            <p className="font-semibold text-amber-900 mb-2">Finish blockchain setup first</p>
+            <p className="text-sm text-amber-900/90 mb-3">
+              The UI is pointing at an InstitutionRegistry address from contract-addresses.json, but that address has no
+              contract code on your RPC. That usually means Hardhat was restarted (chain wiped) or nothing was deployed
+              yet — not that your institution was rejected.
+            </p>
+            <ol className="list-decimal list-inside text-sm space-y-1 text-amber-900/90">
+              <li>
+                Terminal 1: <code className="rounded bg-amber-100/80 px-1">cd prototype</code> then{' '}
+                <code className="rounded bg-amber-100/80 px-1">npm run node</code> — leave it running.
+              </li>
+              <li>
+                Terminal 2: <code className="rounded bg-amber-100/80 px-1">cd prototype</code> then{' '}
+                <code className="rounded bg-amber-100/80 px-1">npm run deploy</code> — updates contract-addresses.json.
+              </li>
+              <li>MetaMask: Localhost / chain ID 31337, RPC URL http://127.0.0.1:8545 (same as the node).</li>
+              <li>Hard refresh this app so it reloads addresses from the API.</li>
+            </ol>
+          </div>
+        )}
 
         {/* Registration Form */}
         <form onSubmit={handleRegister} className="bg-white rounded-xl shadow-sm border p-6" autoComplete="off">
@@ -354,10 +399,10 @@ export default function InstitutionPage() {
 
           <button
             type="submit"
-            disabled={isLoading}
+            disabled={isLoading || deployBlocked}
             className="mt-6 w-full px-6 py-3 bg-primary-600 text-white rounded-lg hover:bg-primary-700 font-medium disabled:opacity-50"
           >
-            {isLoading ? 'Registering...' : 'Register Institution'}
+            {isLoading ? 'Registering...' : deployBlocked ? 'Fix setup above, then register' : 'Register Institution'}
           </button>
         </form>
       </div>
